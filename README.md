@@ -165,7 +165,6 @@ Updated outputs land in:
 ## Notes
 
 - The package is iOS-only.
-- The repository is currently private, so remote SwiftPM consumers need GitHub access to this repository.
 - The checked-in simulator XCFramework slices are `arm64` only.
 - The sample app is intended as a reference integration rather than a production-ready template.
 - Large LiteRT-LM model files require significant disk space and are best tested on real hardware for meaningful latency measurements.
