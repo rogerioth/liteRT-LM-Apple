@@ -1,0 +1,30 @@
+diff --git a/c/BUILD b/c/BUILD
+index 078607a..9ac4b5c 100644
+--- a/c/BUILD
++++ b/c/BUILD
+@@ -83,6 +83,24 @@ cc_library(
+     ],
+ )
+ 
++cc_binary(
++    name = "engine_cpu_shared",
++    linkshared = 1,
++    linkstatic = 1,
++    linkopts = select({
++        "@platforms//os:ios": [
++            "-Wl,-install_name,@rpath/libLiteRTLMEngineCPU.dylib",
++        ],
++        "@platforms//os:macos": [
++            "-Wl,-install_name,@rpath/libLiteRTLMEngineCPU.dylib",
++        ],
++        "//conditions:default": [],
++    }),
++    deps = [
++        ":engine_cpu",
++    ],
++)
++
+ cc_test(
+     name = "engine_test",
+     srcs = ["engine_test.cc"],
+
