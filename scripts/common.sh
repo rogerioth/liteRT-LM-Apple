@@ -18,3 +18,11 @@ require_cmd() {
   fi
 }
 
+log_section() {
+  echo
+  echo "==> $*"
+}
+
+log_info() {
+  echo "  -> $*"
+}
