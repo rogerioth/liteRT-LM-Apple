@@ -32,7 +32,30 @@ You get the upstream `engine.h` surface, packaged so an iOS app can link it from
 
 ## Quick Start
 
-### Add The Package To An App
+### Add The Package From GitHub
+
+The package can be consumed directly from GitHub using the current release tag:
+
+- repository URL: `https://github.com/rogerioth/liteRT-LM-Apple.git`
+- current release: `v0.2.0`
+
+In Xcode:
+
+1. Open your Xcode project.
+2. Choose `File` -> `Add Package Dependencies...`.
+3. Enter `https://github.com/rogerioth/liteRT-LM-Apple.git`.
+4. Select `Up to Next Minor Version` and set the version to `0.2.0`.
+5. Link the `LiteRTLMApple` product to your app target.
+
+In `Package.swift`:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.2.0")
+]
+```
+
+### Add The Package As A Local Checkout
 
 1. Open your Xcode project.
 2. Choose `File` -> `Add Package Dependencies...`.
@@ -142,6 +165,7 @@ Updated outputs land in:
 ## Notes
 
 - The package is iOS-only.
+- The repository is currently private, so remote SwiftPM consumers need GitHub access to this repository.
 - The checked-in simulator XCFramework slices are `arm64` only.
 - The sample app is intended as a reference integration rather than a production-ready template.
 - Large LiteRT-LM model files require significant disk space and are best tested on real hardware for meaningful latency measurements.
