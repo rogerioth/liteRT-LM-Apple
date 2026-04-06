@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/subscripts/common.sh"
 
 upstream_url="${UPSTREAM_URL_DEFAULT}"
 upstream_revision="${UPSTREAM_BASE_REVISION_DEFAULT}"

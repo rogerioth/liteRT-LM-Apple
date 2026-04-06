@@ -69,7 +69,7 @@ mkdir -p \
 for dylib in "${device_constraint_input}" "${sim_constraint_input}"; do
   if ! file "${dylib}" | grep -q "Mach-O"; then
     echo "Expected a Mach-O dylib but found something else: ${dylib}" >&2
-    echo "Run scripts/clone_upstream.sh again and ensure git-lfs materializes the prebuilt binaries." >&2
+    echo "Run ./scripts/buildall.sh again and ensure git-lfs materializes the prebuilt binaries." >&2
     exit 1
   fi
 done

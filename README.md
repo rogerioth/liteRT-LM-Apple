@@ -26,7 +26,8 @@ You get the upstream `engine.h` surface, packaged so an iOS app can link it from
 | `Sources/LiteRTLMApple/include/engine.h` | Public upstream C header exposed to Swift/ObjC |
 | `Artifacts/` | Prebuilt XCFramework artifacts consumed by the package |
 | `patches/0001-export-ios-shared-engine-dylib.patch` | Local patch applied to upstream LiteRT-LM |
-| `scripts/` | Clone, patch, build, package, and refresh helpers |
+| `scripts/buildall.sh` | Public one-pass rebuild entrypoint |
+| `scripts/subscripts/` | Internal clone, patch, build, and packaging helpers |
 | `Examples/LiteRTLMAppleExample/` | SwiftUI sample app for local model download and inference |
 
 ## Quick Start
@@ -126,8 +127,6 @@ That workflow:
 6. repackages the results into local XCFrameworks
 7. refreshes the public `engine.h` header exposed by this package
 
-`./scripts/refresh_package.sh` and `./scripts/rebuild_package.sh` remain available as compatibility wrappers around the same one-pass orchestration.
-
 Updated outputs land in:
 
 - `Artifacts/LiteRTLMEngineCPU.xcframework`
@@ -138,7 +137,7 @@ Updated outputs land in:
 
 - Upstream repository: `https://github.com/google-ai-edge/LiteRT-LM.git`
 - Pinned revision: `e4d5da404e54eeea7903ae23d81fe8447cb3e089`
-- Configuration source: `scripts/common.sh`
+- Configuration source: `scripts/subscripts/common.sh`
 
 ## Notes
 

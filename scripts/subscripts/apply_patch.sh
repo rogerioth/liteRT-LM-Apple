@@ -36,4 +36,3 @@ git -C "${upstream_dir}" apply "${patch_file}"
 
 echo "Applied patch:"
 echo "  ${patch_file}"
-
