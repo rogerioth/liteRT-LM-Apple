@@ -38,10 +38,38 @@ done
 
 require_cmd bazelisk
 require_cmd xcodebuild
+require_cmd xcrun
 require_cmd install
 require_cmd file
 
 mkdir -p "${artifacts_dir}" "${public_headers_dir}"
+
+extract_build_setting() {
+  local input="$1"
+  local setting="$2"
+
+  xcrun vtool -show-build "${input}" | awk -v key="${setting}" '$1 == key { print $2; exit }'
+}
+
+retag_as_maccatalyst() {
+  local input="$1"
+  local output="$2"
+  local minos sdk
+
+  minos="$(extract_build_setting "${input}" minos)"
+  sdk="$(extract_build_setting "${input}" sdk)"
+
+  if [[ -z "${minos}" || -z "${sdk}" ]]; then
+    echo "Failed to extract build settings from ${input}." >&2
+    exit 1
+  fi
+
+  xcrun vtool \
+    -set-build-version maccatalyst "${minos}" "${sdk}" \
+    -replace \
+    -output "${output}" \
+    "${input}" >/dev/null 2>&1
+}
 
 pushd "${upstream_dir}" >/dev/null
 bazelisk build --config=ios_arm64 //c:engine_cpu_shared
@@ -58,9 +86,11 @@ mac_constraint_input="${upstream_dir}/prebuilt/macos_arm64/libGemmaModelConstrai
 
 device_engine_staged="${tmp_dir}/ios-arm64/libLiteRTLMEngineCPU.dylib"
 sim_engine_staged="${tmp_dir}/ios-arm64-simulator/libLiteRTLMEngineCPU.dylib"
+catalyst_engine_staged="${tmp_dir}/ios-arm64-maccatalyst/libLiteRTLMEngineCPU.dylib"
 mac_engine_staged="${tmp_dir}/macos-arm64/libLiteRTLMEngineCPU.dylib"
 device_constraint_staged="${tmp_dir}/ios-arm64/libGemmaModelConstraintProvider.dylib"
 sim_constraint_staged="${tmp_dir}/ios-arm64-simulator/libGemmaModelConstraintProvider.dylib"
+catalyst_constraint_staged="${tmp_dir}/ios-arm64-maccatalyst/libGemmaModelConstraintProvider.dylib"
 mac_constraint_staged="${tmp_dir}/macos-arm64/libGemmaModelConstraintProvider.dylib"
 headers_staged="${tmp_dir}/Headers"
 engine_placeholder_headers_staged="${tmp_dir}/EnginePlaceholderHeaders"
@@ -69,6 +99,7 @@ constraint_placeholder_headers_staged="${tmp_dir}/ConstraintPlaceholderHeaders"
 mkdir -p \
   "$(dirname "${device_engine_staged}")" \
   "$(dirname "${sim_engine_staged}")" \
+  "$(dirname "${catalyst_engine_staged}")" \
   "$(dirname "${mac_engine_staged}")" \
   "${headers_staged}" \
   "${engine_placeholder_headers_staged}" \
@@ -88,9 +119,13 @@ printf '/* Placeholder header to preserve the XCFramework Headers directory in G
 printf '/* Placeholder header to preserve the XCFramework Headers directory in Git. */\n' > "${constraint_placeholder_headers_staged}/GemmaModelConstraintProviderPlaceholder.h"
 install -m 0755 "${device_engine_input}" "${device_engine_staged}"
 install -m 0755 "${sim_engine_input}" "${sim_engine_staged}"
+# Upstream does not publish dedicated Mac Catalyst dylibs, so derive a
+# maccatalyst slice from the Apple Silicon iOS simulator build.
+retag_as_maccatalyst "${sim_engine_input}" "${catalyst_engine_staged}"
 install -m 0755 "${mac_engine_input}" "${mac_engine_staged}"
 install -m 0755 "${device_constraint_input}" "${device_constraint_staged}"
 install -m 0755 "${sim_constraint_input}" "${sim_constraint_staged}"
+retag_as_maccatalyst "${sim_constraint_input}" "${catalyst_constraint_staged}"
 install -m 0755 "${mac_constraint_input}" "${mac_constraint_staged}"
 
 rm -rf \
@@ -100,12 +135,14 @@ rm -rf \
 xcodebuild -create-xcframework \
   -library "${device_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
   -library "${sim_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
+  -library "${catalyst_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
   -library "${mac_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
   -output "${artifacts_dir}/LiteRTLMEngineCPU.xcframework"
 
 xcodebuild -create-xcframework \
   -library "${device_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -library "${sim_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
+  -library "${catalyst_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -library "${mac_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -output "${artifacts_dir}/GemmaModelConstraintProvider.xcframework"
 
