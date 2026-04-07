@@ -4,7 +4,7 @@ This project is intentionally simple to consume, but a few issues show up repeat
 
 ## The Package Resolves, But The Sample App Does Not Run In My Simulator
 
-The checked-in iOS and visionOS simulator artifacts are `arm64` only.
+The checked-in iOS, tvOS, and visionOS simulator artifacts are `arm64` only.
 
 That means:
 
@@ -29,6 +29,15 @@ That means:
 - Apple Silicon Macs are the intended path for Catalyst validation
 - Intel Macs are not supported by the current checked-in Catalyst artifact
 
+## The Apple TV Build Is Unavailable On My Intel Machine
+
+The checked-in tvOS device and simulator slices are also `arm64` only.
+
+That means:
+
+- Apple Silicon Macs are the intended path for Apple TV simulator validation
+- Intel Macs are not supported by the current checked-in tvOS artifacts
+
 ## The Vision Pro Build Is Unavailable On My Intel Machine
 
 The checked-in visionOS device and simulator slices are also `arm64` only.
@@ -46,6 +55,17 @@ If the simulator path is giving you trouble:
 
 - use a recent simulator runtime
 - or validate on a physical device instead
+
+## The tvOS Build Complains About Deployment Target Or Platform Versions
+
+The current tvOS slices are derived from the packaged iOS device and iOS simulator dylibs.
+
+That means:
+
+- the package currently advertises a `tvOS 13.0` floor for the packaged slices
+- the sample app currently targets `tvOS 17.0` because its Apple TV-specific UI uses newer SwiftUI APIs
+- recent Apple TV runtimes on current Xcode releases are the intended validation path
+- if the simulator path gives you trouble, try a generic `tvOS` build first to verify the device slice resolves
 
 ## The Catalyst Build Complains About Deployment Target Or Platform Versions
 

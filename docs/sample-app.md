@@ -1,6 +1,6 @@
 # Sample App Guide
 
-The sample app under `Examples/LiteRTLMAppleExample/` is the fastest way to see this package doing useful work on iPhone, iPad, Apple Vision Pro, native Mac, and Mac Catalyst.
+The sample app under `Examples/LiteRTLMAppleExample/` is the fastest way to see this package doing useful work on iPhone, iPad, Apple TV, Apple Vision Pro, native Mac, and Mac Catalyst.
 
 ## What It Demonstrates
 
@@ -21,6 +21,7 @@ These models are pinned in `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/M
 ## Important Files
 
 - `ContentView.swift`: the sample app interface
+- `TVContentView.swift`: the dedicated Apple TV interface
 - `InferenceViewModel.swift`: presentation state and action orchestration
 - `ModelStore.swift`: local file management and model downloads
 - `LiteRTLMRuntime.swift`: the Swift wrapper around the LiteRT-LM C API
@@ -29,7 +30,7 @@ These models are pinned in `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/M
 
 ## Current Branch Setup
 
-On `feat/visionos-support`, the sample project resolves `LiteRTLMApple` from the matching GitHub branch instead of the last tagged release. That keeps the example closer to the real remote-consumption path while the visionOS support work is still in flight.
+On `feat/tvos-support`, the sample project resolves `LiteRTLMApple` from the matching GitHub branch instead of the last tagged release. That keeps the example closer to the real remote-consumption path while the tvOS support work is still in flight.
 
 ## What To Change First
 

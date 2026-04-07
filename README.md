@@ -1,10 +1,10 @@
 # LiteRT-LM-Apple
 
-If you want to run LiteRT-LM models inside an iPhone, iPad, Apple Vision Pro, Mac, or Mac Catalyst app, but you do not want to spend your time packaging upstream Apple binaries by hand, this repository is for you.
+If you want to run LiteRT-LM models inside an iPhone, iPad, Apple TV, Apple Vision Pro, Mac, or Mac Catalyst app, but you do not want to spend your time packaging upstream Apple binaries by hand, this repository is for you.
 
 `LiteRT-LM-Apple` gives you a Swift Package Manager-friendly way to integrate the upstream LiteRT-LM Apple C API into Xcode. You get prebuilt XCFrameworks, a thin package surface, a reproducible rebuild pipeline, and a working sample app that downloads a model locally and runs on-device inference.
 
-If your practical goal is to run Gemma 4 on an iPhone, iPad, Apple Vision Pro, or Apple Silicon Mac, this repository gives you a direct path to do that in a native SwiftUI app.
+If your practical goal is to run Gemma 4 on an iPhone, iPad, Apple TV, Apple Vision Pro, or Apple Silicon Mac, this repository gives you a direct path to do that in a native SwiftUI app.
 
 ## Why This Repo Exists
 
@@ -23,8 +23,8 @@ This repo is designed to let you answer "yes" to all three.
 - a Swift package product named `LiteRTLMApple`
 - prebuilt `LiteRTLMEngineCPU.xcframework` and `GemmaModelConstraintProvider.xcframework`
 - direct access to the upstream `engine.h` C API from Swift and Objective-C
-- official package support for iOS, visionOS, Apple Silicon macOS, and Apple Silicon Mac Catalyst
-- a complete SwiftUI sample app for local model download and single-turn inference on iPhone, iPad, Apple Vision Pro, native Mac, and Mac Catalyst
+- official package support for iOS, tvOS, visionOS, Apple Silicon macOS, and Apple Silicon Mac Catalyst
+- a complete SwiftUI sample app for local model download and single-turn inference on iPhone, iPad, Apple TV, Apple Vision Pro, native Mac, and Mac Catalyst
 - a practical baseline for running Gemma 4 locally on Apple devices
 - focused markdown documentation under `docs/` for integration, maintenance, and troubleshooting
 - structured Xcode console logging in the sample app so you can see runtime and download failures clearly
@@ -34,7 +34,7 @@ This repo is designed to let you answer "yes" to all three.
 
 This repository is a good fit if you want:
 
-- on-device LLM inference in an iOS, visionOS, or macOS app
+- on-device LLM inference in an iOS, tvOS, visionOS, or macOS app
 - a Swift Package Manager dependency instead of a custom Xcode binary import flow
 - a thin wrapper around upstream LiteRT-LM, not a large opinionated SDK
 - a reproducible way to rebuild the Apple artifacts when upstream changes
@@ -54,7 +54,7 @@ If you want to integrate this package into another app, use the GitHub repositor
 - repository URL: `https://github.com/rogerioth/liteRT-LM-Apple.git`
 - current release: `v0.2.3`
 
-This feature branch adds visionOS support ahead of the next release. The sample app on this branch intentionally resolves the package from `feat/visionos-support` over GitHub SPM so you can validate the in-flight package state before the next tag is published.
+This feature branch adds tvOS support ahead of the next release. The sample app on this branch intentionally resolves the package from `feat/tvos-support` over GitHub SPM so you can validate the in-flight package state before the next tag is published.
 
 In Xcode:
 
@@ -135,7 +135,9 @@ The example project in `Examples/LiteRTLMAppleExample/` shows the complete path 
 - run on-device inference from SwiftUI
 - inspect structured `print` logs in the Xcode console
 
-On this branch, the sample is configured as a universal SwiftUI app for iPhone, iPad, Apple Vision Pro, native Mac, and Mac Catalyst. Open it in Xcode and choose `My Mac`, `Apple Vision Pro`, a Mac Catalyst destination, or an iOS destination to exercise the same flow.
+On this branch, the sample is configured as a universal SwiftUI app for iPhone, iPad, Apple TV, Apple Vision Pro, native Mac, and Mac Catalyst. Open it in Xcode and choose `My Mac`, `Apple TV`, `Apple Vision Pro`, a Mac Catalyst destination, or an iOS destination to exercise the same flow.
+
+On tvOS, the sample uses a dedicated `TVContentView.swift` interface instead of reusing the phone and tablet layout. That keeps the experience closer to the way developers actually need to think about focus, large controls, and living-room navigation on Apple TV.
 
 The current sample app includes pinned Gemma 4 examples:
 
@@ -189,10 +191,11 @@ That script orchestrates the internal subscripts and runs the full pipeline:
 3. fetches the required Git LFS-backed iOS prebuilts
 4. applies the local Apple export patch
 5. builds iOS device, iOS simulator, and macOS dylibs with `bazelisk`
-6. derives an Apple Silicon Mac Catalyst slice from the iOS simulator dylib because upstream does not ship a dedicated Catalyst binary yet
-7. derives visionOS device and simulator slices from the packaged iOS outputs because upstream does not ship dedicated visionOS dylibs yet
-8. creates fresh XCFrameworks
-9. refreshes the public `engine.h` header exposed by this package
+6. derives tvOS device and simulator slices from the packaged iOS outputs because upstream does not ship dedicated tvOS dylibs yet
+7. derives an Apple Silicon Mac Catalyst slice from the iOS simulator dylib because upstream does not ship a dedicated Catalyst binary yet
+8. derives visionOS device and simulator slices from the packaged iOS outputs because upstream does not ship dedicated visionOS dylibs yet
+9. creates fresh XCFrameworks
+10. refreshes the public `engine.h` header exposed by this package
 
 ### Requirements
 
@@ -254,14 +257,17 @@ Current published release:
 
 ## Compatibility Notes
 
-- The package manifest declares `iOS 13.0`, `macOS 14.0`, and `visionOS 1.0`.
-- The package supports iOS, visionOS, Apple Silicon native macOS, and Apple Silicon Mac Catalyst.
-- The checked-in iOS simulator, visionOS simulator, Mac Catalyst, and macOS XCFramework slices are `arm64` only.
+- The package manifest declares `iOS 13.0`, `tvOS 13.0`, `macOS 14.0`, and `visionOS 1.0`.
+- The package supports iOS, tvOS, visionOS, Apple Silicon native macOS, and Apple Silicon Mac Catalyst.
+- The checked-in iOS simulator, tvOS simulator, visionOS simulator, Mac Catalyst, and macOS XCFramework slices are `arm64` only.
+- The current tvOS device and simulator slices are derived from the packaged iOS device and iOS simulator dylibs because upstream does not publish dedicated tvOS binaries yet.
+- The current checked-in tvOS slices have a minimum version of `13.0`.
 - The current `GemmaModelConstraintProvider` iOS simulator and Mac Catalyst slices have a minimum iOS-family version of `26.2`, so recent simulator or Catalyst runtimes, a real iOS device, or a native Mac build are the safest validation paths.
 - The current Mac Catalyst slice is derived from the Apple Silicon iOS simulator dylib because upstream does not publish a dedicated Catalyst binary yet.
 - The current visionOS device and simulator slices are derived from the packaged iOS device and iOS simulator dylibs because upstream does not publish dedicated visionOS binaries yet.
 - The current checked-in visionOS slices have a minimum version of `1.0`.
 - The current checked-in macOS slice has a minimum version of `14.0`.
+- The sample app targets `tvOS 17.0+` so its dedicated Apple TV interface can use modern SwiftUI navigation and focus APIs.
 - The sample app is a reference integration, not a production framework.
 - Large LiteRT-LM model files require meaningful disk space and are better evaluated on real hardware when you care about latency.
 
@@ -276,7 +282,7 @@ See [`LICENSE`](LICENSE) for the full text.
 
 ## If You Want To Start Fast
 
-If your goal is simply to prove that LiteRT-LM can run in your iOS environment, do this:
+If your goal is simply to prove that LiteRT-LM can run in your Apple app environment, do this:
 
 1. Add the package from GitHub.
 2. Open the sample app.

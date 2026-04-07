@@ -1,6 +1,6 @@
 # Integration Guide
 
-This package exists to make LiteRT-LM feel like a normal Swift Package Manager dependency in an iOS, visionOS, macOS, or Mac Catalyst app.
+This package exists to make LiteRT-LM feel like a normal Swift Package Manager dependency in an iOS, tvOS, visionOS, macOS, or Mac Catalyst app.
 
 ## Add The Package
 
@@ -30,7 +30,7 @@ If you are evaluating this feature branch before the next tagged release, you ca
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", branch: "feat/visionos-support")
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", branch: "feat/tvos-support")
 ]
 ```
 
@@ -45,10 +45,12 @@ The package exposes the upstream LiteRT-LM C surface directly through the packag
 ## Platform Notes
 
 - This branch supports `iOS 13.0+`.
+- This branch supports `tvOS 13.0+`.
 - This branch supports `visionOS 1.0+`.
 - This branch supports Apple Silicon `macOS 14.0+`.
 - This branch supports Apple Silicon Mac Catalyst.
-- The checked-in iOS simulator, visionOS simulator, Mac Catalyst, and macOS slices are `arm64` only.
+- The checked-in iOS simulator, tvOS simulator, visionOS simulator, Mac Catalyst, and macOS slices are `arm64` only.
+- The current tvOS device and simulator slices are derived from the packaged iOS device and iOS simulator dylibs because upstream does not publish dedicated tvOS binaries yet.
 - The current Mac Catalyst slice is derived from the Apple Silicon iOS simulator dylib because upstream does not publish a dedicated Catalyst binary yet.
 - The current visionOS device and simulator slices are derived from the packaged iOS device and iOS simulator dylibs because upstream does not publish dedicated visionOS binaries yet.
 
@@ -89,4 +91,4 @@ That path gives you:
 - inference execution
 - benchmark collection
 - Xcode console logging for downloads and runtime setup
-- one tested SwiftUI flow that now works on iPhone, iPad, Apple Vision Pro, native Mac, and Mac Catalyst
+- one tested SwiftUI flow that now works on iPhone, iPad, Apple TV, Apple Vision Pro, native Mac, and Mac Catalyst
