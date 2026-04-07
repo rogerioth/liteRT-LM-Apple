@@ -3,7 +3,7 @@ import Foundation
 @MainActor
 final class InferenceViewModel: ObservableObject {
     @Published private(set) var selectedModel: ExampleModelDescriptor = ExampleModelCatalog.defaultModel
-    @Published var prompt = "Explain why running LiteRT-LM locally on iPhone, iPad, or Mac can be useful in three short sentences."
+    @Published var prompt = "Explain why running LiteRT-LM locally on iPhone, iPad, Apple TV, or Mac can be useful in three short sentences."
     @Published private(set) var localModelURL: URL?
     @Published private(set) var downloadProgress: ModelDownloadProgress?
     @Published private(set) var response = ""
@@ -80,6 +80,21 @@ final class InferenceViewModel: ObservableObject {
         localModelURL?.path ?? "No local model downloaded yet."
     }
 
+    var canDownloadSelectedModel: Bool {
+        !isDownloading && !isRunning && localModelURL == nil
+    }
+
+    var canDeleteSelectedModel: Bool {
+        !isDownloading && !isRunning && localModelURL != nil
+    }
+
+    var canRunInference: Bool {
+        !isDownloading &&
+        !isRunning &&
+        localModelURL != nil &&
+        !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func startIfNeeded() {
         guard !hasStarted else { return }
         hasStarted = true
@@ -99,6 +114,15 @@ final class InferenceViewModel: ObservableObject {
         errorMessage = ""
         downloadProgress = nil
         refreshLocalModelState()
+    }
+
+    func setPrompt(_ newPrompt: String, source: String) {
+        guard newPrompt != prompt else { return }
+        prompt = newPrompt
+        ConsoleLog.info(
+            "Prompt updated from \(source). chars=\(newPrompt.count) preview=\(ConsoleLog.preview(newPrompt)).",
+            category: "ViewModel"
+        )
     }
 
     func downloadSelectedModel() {

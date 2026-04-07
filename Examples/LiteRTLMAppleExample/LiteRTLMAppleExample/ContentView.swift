@@ -1,3 +1,4 @@
+#if !os(tvOS)
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -379,3 +380,4 @@ private extension Color {
     ContentView(viewModel: InferenceViewModel())
         .preferredColorScheme(.dark)
 }
+#endif
