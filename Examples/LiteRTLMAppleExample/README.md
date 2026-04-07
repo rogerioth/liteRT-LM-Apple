@@ -2,7 +2,7 @@
 
 This example app shows the intended integration path for this repository:
 
-- add `LiteRTLMApple` as a local Swift package
+- fetch `LiteRTLMApple` from GitHub through Swift Package Manager
 - download a pinned `.litertlm` model into local app storage
 - initialize LiteRT-LM with a cache directory
 - run single-turn inference from SwiftUI
@@ -19,7 +19,7 @@ The current checked-in simulator artifacts are `arm64` only, so Intel simulator 
 
 ## What The App Demonstrates
 
-- local package linking back to the repository root
+- a real remote Swift Package Manager dependency on this GitHub repository
 - deterministic Hugging Face download URLs for pinned models
 - model storage under Application Support
 - cache storage under Caches
