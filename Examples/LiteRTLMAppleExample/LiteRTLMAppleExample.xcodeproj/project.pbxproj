@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 71;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -15,13 +15,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		0784227F15F3AE7FE1786A21 /* LiteRTLMAppleExample */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
-			path = LiteRTLMAppleExample;
-			sourceTree = "<group>";
-		};
+		0784227F15F3AE7FE1786A21 /* LiteRTLMAppleExample */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = LiteRTLMAppleExample; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -115,9 +109,8 @@
 			mainGroup = 2EA300BAC80BEBF635759592;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				9FAE354467BBDDA1950B8473 /* XCLocalSwiftPackageReference ".." */,
+				9FAE354467BBDDA1950B8473 /* XCLocalSwiftPackageReference "../.." */,
 			);
-			preferredProjectObjectVersion = 77;
 			productRefGroup = 94A041948E43E6F3857E3131 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -210,6 +203,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 693YX79L7U;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -234,6 +228,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 693YX79L7U;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -336,7 +331,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		9FAE354467BBDDA1950B8473 /* XCLocalSwiftPackageReference ".." */ = {
+		9FAE354467BBDDA1950B8473 /* XCLocalSwiftPackageReference "../.." */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../..;
 		};
@@ -345,7 +340,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		DCFA7CD16C587F817ACA85C1 /* LiteRTLMApple */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 9FAE354467BBDDA1950B8473 /* XCLocalSwiftPackageReference ".." */;
+			package = 9FAE354467BBDDA1950B8473 /* XCLocalSwiftPackageReference "../.." */;
 			productName = LiteRTLMApple;
 		};
 /* End XCSwiftPackageProductDependency section */
