@@ -14,13 +14,15 @@ This example app shows the intended integration path for this repository:
 Examples/LiteRTLMAppleExample/LiteRTLMAppleExample.xcodeproj
 ```
 
-On `feat/macos-support`, the project is configured to resolve `LiteRTLMApple` from the matching GitHub branch through Swift Package Manager so the sample reflects the in-progress macOS package state.
+On `feat/maccatalyst-support`, the project is configured to resolve `LiteRTLMApple` from the matching GitHub branch through Swift Package Manager so the sample reflects the in-progress package state, including the new Mac Catalyst slice.
 
 If you are running on a physical iOS device, choose your signing team in Xcode before building.
 
-For Mac validation, choose `My Mac` in Xcode. The checked-in macOS slice is Apple Silicon only and requires `macOS 14.0+`.
+For native Mac validation, choose `My Mac` in Xcode. The checked-in macOS slice is Apple Silicon only and requires `macOS 14.0+`.
 
-The current checked-in simulator artifacts are `arm64` only, so Intel simulator builds are not supported by this repository as-is.
+For Mac Catalyst validation, choose a Mac Catalyst destination in Xcode. The checked-in Catalyst slice is Apple Silicon only and is currently derived from the packaged Apple Silicon iOS simulator dylib because upstream does not ship a dedicated Catalyst binary.
+
+The current checked-in simulator and Catalyst artifacts are `arm64` only, so Intel simulator or Intel Catalyst builds are not supported by this repository as-is.
 
 ## What The App Demonstrates
 
