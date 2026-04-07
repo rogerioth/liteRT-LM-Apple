@@ -1,0 +1,15 @@
+{
+  "originHash" : "275cee255e6687486f6537c5366e66f1b76987f0e13c973c0a021163d11fe415",
+  "pins" : [
+    {
+      "identity" : "litert-lm-apple",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/rogerioth/liteRT-LM-Apple.git",
+      "state" : {
+        "branch" : "feat/macos-support",
+        "revision" : "f45c52433567fbc9bb07ebf807593e999258f3b8"
+      }
+    }
+  ],
+  "version" : 3
+}

@@ -6,6 +6,7 @@ This example app shows the intended integration path for this repository:
 - download a pinned `.litertlm` model into local app storage
 - initialize LiteRT-LM with a cache directory
 - run single-turn inference from SwiftUI
+- exercise the same flow on iPhone, iPad, or Mac
 
 ## Open The Project
 
@@ -13,7 +14,11 @@ This example app shows the intended integration path for this repository:
 Examples/LiteRTLMAppleExample/LiteRTLMAppleExample.xcodeproj
 ```
 
-If you are running on a physical device, choose your signing team in Xcode before building.
+On `feat/macos-support`, the project is configured to resolve `LiteRTLMApple` from the matching GitHub branch through Swift Package Manager so the sample reflects the in-progress macOS package state.
+
+If you are running on a physical iOS device, choose your signing team in Xcode before building.
+
+For Mac validation, choose `My Mac` in Xcode. The checked-in macOS slice is Apple Silicon only and requires `macOS 14.0+`.
 
 The current checked-in simulator artifacts are `arm64` only, so Intel simulator builds are not supported by this repository as-is.
 
