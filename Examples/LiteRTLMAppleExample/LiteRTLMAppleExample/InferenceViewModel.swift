@@ -3,7 +3,7 @@ import Foundation
 @MainActor
 final class InferenceViewModel: ObservableObject {
     @Published private(set) var selectedModel: ExampleModelDescriptor = ExampleModelCatalog.defaultModel
-    @Published var prompt = "Explain why running LiteRT-LM locally on iPhone can be useful in three short sentences."
+    @Published var prompt = "Explain why running LiteRT-LM locally on iPhone, iPad, or Mac can be useful in three short sentences."
     @Published private(set) var localModelURL: URL?
     @Published private(set) var downloadProgress: ModelDownloadProgress?
     @Published private(set) var response = ""
