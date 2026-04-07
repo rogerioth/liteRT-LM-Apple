@@ -1,3 +1,4 @@
+#if os(tvOS)
 import SwiftUI
 
 private struct TVPromptPreset: Identifiable, Hashable {
@@ -33,43 +34,30 @@ private enum TVPromptCatalog {
 struct TVContentView: View {
     @ObservedObject var viewModel: InferenceViewModel
     @State private var draftPrompt = ""
+    @FocusState private var promptFieldFocused: Bool
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.08, green: 0.12, blue: 0.20),
-                        Color(red: 0.04, green: 0.05, blue: 0.10),
-                        Color.black,
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 56) {
+                    heroSection
+                    statusSection
+                    modelSection
+                    actionSection
+                    promptSection
+                    responseSection
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        heroPanel
-
-                        HStack(alignment: .top, spacing: 28) {
-                            modelPanel
-                            actionPanel
-                        }
-
-                        promptPanel
-                        responsePanel
-
-                        if let benchmark = viewModel.benchmark {
-                            benchmarkPanel(benchmark)
-                        }
+                    if let benchmark = viewModel.benchmark {
+                        benchmarkSection(benchmark)
                     }
-                    .padding(.horizontal, 60)
-                    .padding(.vertical, 48)
-                    .frame(maxWidth: 1500, alignment: .leading)
                 }
+                .padding(.horizontal, 90)
+                .padding(.top, 60)
+                .padding(.bottom, 120)
+                .frame(maxWidth: 1700, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .navigationTitle("LiteRT-LM")
+            .background(backgroundGradient.ignoresSafeArea())
         }
         .task {
             viewModel.startIfNeeded()
@@ -82,304 +70,467 @@ struct TVContentView: View {
         }
     }
 
-    private var heroPanel: some View {
-        TVPanel {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Apple TV Demo")
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
+    // MARK: - Background
 
-                Text("Download a pinned Gemma 4 model, keep it on-device, and run LiteRT-LM inference from a tvOS-native sample app.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [
+                Color(white: 0.06),
+                Color(white: 0.02),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
 
-                HStack(spacing: 16) {
-                    TVStatusBadge(
-                        title: viewModel.statusTitle,
-                        message: viewModel.statusMessage,
-                        systemImage: statusIcon,
-                        tint: statusTint
-                    )
+    // MARK: - Hero
 
-                    Link(destination: viewModel.selectedModel.huggingFacePageURL) {
-                        Label("Model Source", systemImage: "link")
-                            .frame(minWidth: 220)
+    private var heroSection: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("LITE RT • LM")
+                .font(.callout.weight(.heavy))
+                .tracking(6)
+                .foregroundStyle(.tint)
+
+            Text("On-Device Inference for Apple TV")
+                .font(.system(size: 56, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+
+            Text("Download a pinned Gemma model, keep it on-device, and run LiteRT-LM inference from a tvOS-native sample app.")
+                .font(.title3)
+                .foregroundStyle(.white.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 1100, alignment: .leading)
+        }
+    }
+
+    // MARK: - Status
+
+    private var statusSection: some View {
+        section(title: "Status", systemImage: "waveform.path.ecg") {
+            HStack(spacing: 24) {
+                statusCard
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Link(destination: viewModel.selectedModel.huggingFacePageURL) {
+                    HStack(spacing: 14) {
+                        Image(systemName: "link.circle.fill")
+                            .font(.title2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Model Source")
+                                .font(.headline)
+                            Text("Open on Hugging Face")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.white.opacity(0.18))
+                    .padding(.vertical, 18)
+                    .padding(.horizontal, 28)
                 }
+                .buttonStyle(.card)
             }
         }
     }
 
-    private var modelPanel: some View {
-        TVPanel {
-            VStack(alignment: .leading, spacing: 18) {
-                tvSectionLabel("Model Library", systemImage: "shippingbox.fill")
+    private var statusCard: some View {
+        HStack(spacing: 22) {
+            ZStack {
+                Circle()
+                    .fill(statusTint.opacity(0.18))
+                Image(systemName: statusIcon)
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(statusTint)
+            }
+            .frame(width: 78, height: 78)
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text(viewModel.statusTitle)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text(viewModel.statusMessage)
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.65))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(28)
+        .background(panelBackground)
+    }
+
+    // MARK: - Models
+
+    private var modelSection: some View {
+        section(title: "Model Library", systemImage: "shippingbox.fill") {
+            VStack(spacing: 22) {
                 ForEach(ExampleModelCatalog.all) { model in
                     Button {
                         viewModel.selectModel(model)
                     } label: {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(model.displayName)
-                                    .font(.title3.weight(.semibold))
-                                    .foregroundStyle(.white)
-
-                                Spacer()
-
-                                if viewModel.selectedModel == model {
-                                    Label("Selected", systemImage: "checkmark.circle.fill")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.green)
-                                }
-                            }
-
-                            Text(model.summary)
-                                .font(.body)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            HStack(spacing: 16) {
-                                tvMetaPill("Size", model.sizeDescription)
-                                tvMetaPill("File", model.fileName, monospaced: true)
-                                tvMetaPill(
-                                    "Storage",
-                                    viewModel.localModelURL != nil && viewModel.selectedModel == model ? "Local" : "Remote"
-                                )
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(22)
-                        .background(
-                            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                                .fill(viewModel.selectedModel == model ? Color.white.opacity(0.12) : Color.white.opacity(0.05))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                                .strokeBorder(viewModel.selectedModel == model ? Color.white.opacity(0.28) : Color.white.opacity(0.08))
-                        )
+                        modelRow(model)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.card)
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .top)
     }
 
-    private var actionPanel: some View {
-        TVPanel {
-            VStack(alignment: .leading, spacing: 18) {
-                tvSectionLabel("Actions", systemImage: "sparkles.rectangle.stack.fill")
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(viewModel.selectedModel.displayName)
-                        .font(.title2.weight(.bold))
-                    Text(viewModel.localModelPath)
-                        .font(.callout.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
+    private func modelRow(_ model: ExampleModelDescriptor) -> some View {
+        let isSelected = viewModel.selectedModel == model
+        let isLocal = isSelected && viewModel.localModelURL != nil
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                Text(model.displayName)
+                    .font(.title2.weight(.semibold))
+                Spacer()
+                if isSelected {
+                    Label("Selected", systemImage: "checkmark.circle.fill")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.green)
                 }
+            }
 
+            Text(model.summary)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 14) {
+                metaPill("Size", model.sizeDescription)
+                metaPill("File", model.fileName, monospaced: true)
+                metaPill("Storage", isLocal ? "Local" : "Remote")
+            }
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Actions
+
+    private var actionSection: some View {
+        section(title: "Actions", systemImage: "sparkles.rectangle.stack.fill") {
+            VStack(spacing: 22) {
                 if viewModel.isDownloading, let progress = viewModel.downloadProgress {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Download Progress")
-                                .font(.headline)
-                            Spacer()
-                            Text(progress.percentDescription)
-                                .font(.headline.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
+                    downloadProgressCard(progress)
+                }
 
-                        ProgressView(value: progress.fractionCompleted)
+                HStack(spacing: 22) {
+                    actionButton(
+                        title: viewModel.isDownloading ? "Downloading…" : "Download Model",
+                        systemImage: "arrow.down.circle.fill",
+                        tint: .blue,
+                        enabled: viewModel.canDownloadSelectedModel
+                    ) {
+                        viewModel.downloadSelectedModel()
+                    }
 
-                        Text("\(progress.completedDescription) of \(progress.totalDescription)")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                    actionButton(
+                        title: viewModel.isRunning ? "Running…" : "Run Inference",
+                        systemImage: "play.circle.fill",
+                        tint: .orange,
+                        enabled: viewModel.canRunInference
+                    ) {
+                        viewModel.runInference()
+                    }
+
+                    actionButton(
+                        title: "Delete Local",
+                        systemImage: "trash.fill",
+                        tint: .red,
+                        enabled: viewModel.canDeleteSelectedModel
+                    ) {
+                        viewModel.deleteSelectedModel()
                     }
                 }
-
-                Button {
-                    viewModel.downloadSelectedModel()
-                } label: {
-                    Label(viewModel.isDownloading ? "Downloading Model" : "Download Model", systemImage: "arrow.down.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!viewModel.canDownloadSelectedModel)
-
-                Button(role: .destructive) {
-                    viewModel.deleteSelectedModel()
-                } label: {
-                    Label("Delete Local Model", systemImage: "trash.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(!viewModel.canDeleteSelectedModel)
-
-                Button {
-                    viewModel.runInference()
-                } label: {
-                    Label(viewModel.isRunning ? "Running Inference" : "Run Inference", systemImage: "play.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
-                .disabled(!viewModel.canRunInference)
             }
         }
-        .frame(width: 430, alignment: .top)
     }
 
-    private var promptPanel: some View {
-        TVPanel {
-            VStack(alignment: .leading, spacing: 18) {
-                tvSectionLabel("Prompt Studio", systemImage: "text.bubble.fill")
+    private func actionButton(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        enabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 14) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 44, weight: .semibold))
+                    .foregroundStyle(tint)
+                Text(title)
+                    .font(.title3.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 36)
+            .padding(.horizontal, 24)
+        }
+        .buttonStyle(.card)
+        .disabled(!enabled)
+        .opacity(enabled ? 1.0 : 0.45)
+    }
 
-                Text("Apple TV works better with curated prompts than tiny text fields, so this sample gives you large presets and a simple editor for quick iteration.")
+    private func downloadProgressCard(_ progress: ModelDownloadProgress) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Downloading")
+                    .font(.headline)
+                Spacer()
+                Text(progress.percentDescription)
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(value: progress.fractionCompleted)
+                .tint(.blue)
+            Text("\(progress.completedDescription) of \(progress.totalDescription)")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(panelBackground)
+    }
+
+    // MARK: - Prompt
+
+    private var promptSection: some View {
+        section(title: "Prompt Studio", systemImage: "text.bubble.fill") {
+            VStack(alignment: .leading, spacing: 24) {
+                Text("Choose a curated preset or open the editor to type with the on-screen keyboard.")
                     .font(.body)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
 
-                TextField("Edit the active prompt", text: $draftPrompt, axis: .vertical)
-                    .font(.body)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(Color.white.opacity(0.06))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08))
-                    )
+                Button {
+                    promptFieldFocused = true
+                } label: {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "square.and.pencil")
+                            Text("Active Prompt")
+                                .font(.headline)
+                            Spacer()
+                            Text("Tap to edit")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(draftPrompt.isEmpty ? "No prompt set." : draftPrompt)
+                            .font(.title3)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .lineLimit(6)
+                    }
+                    .padding(28)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.card)
 
-                HStack(spacing: 12) {
+                // Hidden field that the focus state above brings up the keyboard for.
+                TextField("Edit prompt", text: $draftPrompt, axis: .vertical)
+                    .focused($promptFieldFocused)
+                    .opacity(0)
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
+
+                HStack(spacing: 22) {
                     Button {
                         viewModel.setPrompt(draftPrompt, source: "tvOS editor")
                     } label: {
-                        Label("Apply Prompt", systemImage: "square.and.pencil")
+                        Label("Apply Prompt", systemImage: "checkmark.circle.fill")
+                            .font(.headline)
+                            .padding(.vertical, 22)
+                            .padding(.horizontal, 32)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.card)
                     .disabled(draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draftPrompt == viewModel.prompt)
 
                     Button {
                         draftPrompt = viewModel.prompt
                     } label: {
                         Label("Revert", systemImage: "arrow.uturn.backward")
+                            .font(.headline)
+                            .padding(.vertical, 22)
+                            .padding(.horizontal, 32)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.card)
                     .disabled(draftPrompt == viewModel.prompt)
                 }
 
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(TVPromptCatalog.all) { preset in
-                        Button {
-                            draftPrompt = preset.prompt
-                            viewModel.setPrompt(preset.prompt, source: "tvOS preset \(preset.id)")
-                        } label: {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(preset.title)
-                                    .font(.headline)
-                                    .foregroundStyle(.white)
-                                Text(preset.summary)
-                                    .font(.callout)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Spacer(minLength: 0)
-                                Text(preset.prompt)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(4)
+                Text("PRESETS")
+                    .font(.caption.weight(.bold))
+                    .tracking(1.4)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 28) {
+                        ForEach(TVPromptCatalog.all) { preset in
+                            Button {
+                                draftPrompt = preset.prompt
+                                viewModel.setPrompt(preset.prompt, source: "tvOS preset \(preset.id)")
+                            } label: {
+                                presetCard(preset)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 200, alignment: .leading)
-                            .padding(20)
-                            .background(
-                                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                    .fill(Color.white.opacity(0.05))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.08))
-                            )
+                            .buttonStyle(.card)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.vertical, 30)
+                    .padding(.horizontal, 8)
                 }
             }
         }
     }
 
-    private var responsePanel: some View {
-        TVPanel {
-            VStack(alignment: .leading, spacing: 18) {
-                tvSectionLabel("Response", systemImage: "waveform.and.magnifyingglass")
+    private func presetCard(_ preset: TVPromptPreset) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(preset.title)
+                .font(.title3.weight(.bold))
+            Text(preset.summary)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Text(preset.prompt)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(5)
+        }
+        .padding(26)
+        .frame(width: 360, height: 280, alignment: .topLeading)
+    }
 
+    // MARK: - Response
+
+    private var responseSection: some View {
+        section(title: "Response", systemImage: "waveform.and.magnifyingglass") {
+            VStack(alignment: .leading, spacing: 20) {
                 if !viewModel.errorMessage.isEmpty {
-                    HStack(alignment: .top, spacing: 10) {
+                    HStack(alignment: .top, spacing: 14) {
                         Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.title3)
                             .foregroundStyle(.orange)
                         Text(viewModel.errorMessage)
                             .font(.body)
                             .foregroundStyle(.white)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(18)
-                    .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 }
 
-                if viewModel.isRunning {
-                    HStack(spacing: 12) {
-                        ProgressView()
-                        Text("Generating on Apple TV...")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
+                Button {} label: {
+                    Group {
+                        if viewModel.isRunning {
+                            HStack(spacing: 16) {
+                                ProgressView()
+                                Text("Generating on Apple TV…")
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else if viewModel.response.isEmpty {
+                            Text("No response yet. Download a model, choose a prompt, and run on-device inference.")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(viewModel.response)
+                                .font(.title3)
+                                .foregroundStyle(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                    .padding(20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                } else if viewModel.response.isEmpty {
-                    Text("No response yet. Download a model, choose a prompt, and run on-device inference.")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                        .padding(20)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                } else {
-                    Text(viewModel.response)
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(24)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .padding(32)
+                    .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
                 }
+                .buttonStyle(.card)
             }
         }
     }
 
-    private func benchmarkPanel(_ benchmark: InferenceBenchmark) -> some View {
-        TVPanel {
-            VStack(alignment: .leading, spacing: 16) {
-                tvSectionLabel("Benchmark", systemImage: "speedometer")
+    // MARK: - Benchmark
 
-                HStack(spacing: 16) {
-                    tvMetricCard(title: "Initialization", value: benchmark.initializationDescription)
-                    tvMetricCard(title: "Time To First Token", value: benchmark.timeToFirstTokenDescription)
-                }
+    private func benchmarkSection(_ benchmark: InferenceBenchmark) -> some View {
+        section(title: "Benchmark", systemImage: "speedometer") {
+            HStack(spacing: 28) {
+                metricCard(title: "Initialization", value: benchmark.initializationDescription)
+                metricCard(title: "Time To First Token", value: benchmark.timeToFirstTokenDescription)
             }
         }
+    }
+
+    private func metricCard(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title.uppercased())
+                .font(.caption.weight(.bold))
+                .tracking(1.0)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(28)
+        .background(panelBackground)
+    }
+
+    // MARK: - Helpers
+
+    private var panelBackground: some View {
+        RoundedRectangle(cornerRadius: 26, style: .continuous)
+            .fill(Color.white.opacity(0.06))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.10))
+            )
+    }
+
+    @ViewBuilder
+    private func section<Content: View>(
+        title: String,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.tint)
+                Text(title.uppercased())
+                    .font(.subheadline.weight(.heavy))
+                    .tracking(2.4)
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+            content()
+        }
+    }
+
+    private func metaPill(_ title: String, _ value: String, monospaced: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(0.8)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(monospaced ? .caption.monospaced() : .caption)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+        )
     }
 
     private var statusTint: Color {
         if !viewModel.errorMessage.isEmpty { return .red }
         if viewModel.isRunning || viewModel.isDownloading { return .orange }
         if viewModel.localModelURL != nil { return .green }
-        return .white.opacity(0.7)
+        return .blue
     }
 
     private var statusIcon: String {
@@ -389,100 +540,9 @@ struct TVContentView: View {
         if viewModel.localModelURL != nil { return "checkmark.circle.fill" }
         return "circle.dotted"
     }
-
-    private func tvSectionLabel(_ title: String, systemImage: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.headline)
-                .foregroundStyle(.white.opacity(0.9))
-            Text(title.uppercased())
-                .font(.caption.weight(.bold))
-                .tracking(1.2)
-                .foregroundStyle(.white.opacity(0.65))
-        }
-    }
-
-    private func tvMetaPill(_ title: String, _ value: String, monospaced: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .font(.caption2.weight(.bold))
-                .tracking(0.8)
-                .foregroundStyle(.white.opacity(0.5))
-            Text(value)
-                .font(monospaced ? .caption.monospaced() : .caption)
-                .foregroundStyle(.white.opacity(0.9))
-                .lineLimit(1)
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 14)
-        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    private func tvMetricCard(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased())
-                .font(.caption.weight(.bold))
-                .tracking(0.9)
-                .foregroundStyle(.white.opacity(0.55))
-            Text(value)
-                .font(.title2.monospacedDigit().weight(.bold))
-                .foregroundStyle(.white)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-    }
-}
-
-private struct TVPanel<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        content
-            .padding(28)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .fill(.ultraThinMaterial.opacity(0.92))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.09))
-            )
-    }
-}
-
-private struct TVStatusBadge: View {
-    let title: String
-    let message: String
-    let systemImage: String
-    let tint: Color
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(tint)
-                .frame(width: 54, height: 54)
-                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
-                Text(message)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 18)
-        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
 }
 
 #Preview {
     TVContentView(viewModel: InferenceViewModel())
 }
+#endif
