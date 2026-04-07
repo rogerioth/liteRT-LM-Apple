@@ -4,7 +4,7 @@ This project is intentionally simple to consume, but a few issues show up repeat
 
 ## The Package Resolves, But The Sample App Does Not Run In My Simulator
 
-The checked-in simulator artifacts are `arm64` only.
+The checked-in iOS and visionOS simulator artifacts are `arm64` only.
 
 That means:
 
@@ -29,6 +29,15 @@ That means:
 - Apple Silicon Macs are the intended path for Catalyst validation
 - Intel Macs are not supported by the current checked-in Catalyst artifact
 
+## The Vision Pro Build Is Unavailable On My Intel Machine
+
+The checked-in visionOS device and simulator slices are also `arm64` only.
+
+That means:
+
+- Apple Silicon Macs are the intended path for Vision Pro simulator validation
+- Intel Macs are not supported by the current checked-in visionOS artifacts
+
 ## The Simulator Build Complains About Deployment Target Or Platform Versions
 
 The current `GemmaModelConstraintProvider` simulator slice has a minimum iOS simulator version of `26.2`.
@@ -47,6 +56,16 @@ That means:
 - it currently inherits the iOS-family deployment floor from the packaged simulator binary
 - recent Mac Catalyst runtimes on current Xcode releases are the intended validation path
 - native macOS is the safer path if you need the lowest-friction Mac validation today
+
+## The visionOS Build Complains About Deployment Target Or Platform Versions
+
+The current visionOS slices are derived from the packaged iOS device and iOS simulator dylibs.
+
+That means:
+
+- the package currently advertises a `visionOS 1.0` floor for the packaged slices
+- recent Apple Vision Pro runtimes on current Xcode releases are the intended validation path
+- if the simulator path gives you trouble, try a generic `visionOS` build first to verify the device slice resolves
 
 ## The Mac Build Succeeds, But The App Fails To Launch
 

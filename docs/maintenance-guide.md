@@ -20,8 +20,9 @@ That top-level script is the public entrypoint. It delegates to the helper scrip
 4. Applies the local export patch.
 5. Builds iOS device, iOS simulator, and macOS dylibs with `bazelisk`.
 6. Derives an Apple Silicon Mac Catalyst slice from the iOS simulator dylib.
-7. Repackages them as XCFrameworks.
-8. Refreshes the public `engine.h` header exposed by this package.
+7. Derives visionOS device and simulator slices from the packaged iOS outputs.
+8. Repackages them as XCFrameworks.
+9. Refreshes the public `engine.h` header exposed by this package.
 
 ## When To Run It
 
@@ -51,4 +52,4 @@ If the sample project is temporarily following a feature branch through remote S
 - `Sources/LiteRTLMApple/include/engine.h`
 - `README.md` when user-facing setup or compatibility notes change
 
-The current Catalyst packaging is intentionally explicit about an upstream limitation: LiteRT-LM does not publish dedicated Catalyst dylibs today, so this repository derives the Catalyst slice from the Apple Silicon iOS simulator dylib and validates it through Xcode.
+The current Catalyst and visionOS packaging is intentionally explicit about upstream limitations: LiteRT-LM does not publish dedicated Catalyst or visionOS dylibs today, so this repository derives those slices from the packaged iOS outputs and validates them through Xcode.
