@@ -139,11 +139,14 @@ struct ContentView: View {
                     Button {
                         viewModel.downloadSelectedModel()
                     } label: {
-                        Label(
-                            viewModel.isDownloading ? "Downloading…" : "Download",
-                            systemImage: "arrow.down.circle"
-                        )
-                        .frame(maxWidth: .infinity)
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.down.circle")
+                            Text(viewModel.isDownloading ? "Downloading" : "Download")
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 22)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
@@ -152,8 +155,14 @@ struct ContentView: View {
                     Button(role: .destructive) {
                         viewModel.deleteSelectedModel()
                     } label: {
-                        Label("Delete", systemImage: "trash")
-                            .frame(maxWidth: .infinity)
+                        HStack(spacing: 6) {
+                            Image(systemName: "trash")
+                            Text("Delete")
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 22)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.regular)
@@ -188,11 +197,14 @@ struct ContentView: View {
                 Button {
                     viewModel.runInference()
                 } label: {
-                    Label(
-                        viewModel.isRunning ? "Running…" : "Run Inference",
-                        systemImage: "play.fill"
-                    )
-                    .frame(maxWidth: .infinity)
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.fill")
+                        Text(viewModel.isRunning ? "Running" : "Run Inference")
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 22)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
