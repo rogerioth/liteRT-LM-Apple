@@ -51,7 +51,7 @@ This repository is probably not what you want if you are looking for:
 If you want to integrate this package into another app, use the GitHub repository URL and a tagged release.
 
 - repository URL: `https://github.com/rogerioth/liteRT-LM-Apple.git`
-- current release: `v0.2.1`
+- current release: `v0.2.2`
 
 In Xcode:
 
@@ -59,14 +59,14 @@ In Xcode:
 2. Choose `File` -> `Add Package Dependencies...`.
 3. Enter `https://github.com/rogerioth/liteRT-LM-Apple.git`.
 4. Select `Up to Next Minor Version`.
-5. Set the version to `0.2.1`.
+5. Set the version to `0.2.2`.
 6. Link the `LiteRTLMApple` product to your app target.
 
 In `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.2.1")
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.2.2")
 ]
 ```
 
@@ -237,7 +237,7 @@ Swift Package Manager resolves this package from Git tags. If you are integratin
 
 Current published release:
 
-- `v0.2.1`
+- `v0.2.2`
 
 ## Upstream Pin
 

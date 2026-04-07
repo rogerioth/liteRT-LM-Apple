@@ -76,6 +76,7 @@ done
 
 install -m 0644 "${upstream_dir}/c/engine.h" "${public_headers_dir}/engine.h"
 install -m 0644 "${upstream_dir}/c/engine.h" "${headers_staged}/engine.h"
+touch "${empty_headers_staged}/.gitkeep"
 install -m 0755 "${device_engine_input}" "${device_engine_staged}"
 install -m 0755 "${sim_engine_input}" "${sim_engine_staged}"
 install -m 0755 "${device_constraint_input}" "${device_constraint_staged}"
