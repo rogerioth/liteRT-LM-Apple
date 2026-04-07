@@ -1,16 +1,16 @@
 # LiteRT-LM-Apple
 
-If you want to run LiteRT-LM models inside an iPhone or iPad app, but you do not want to spend your time packaging upstream Apple binaries by hand, this repository is for you.
+If you want to run LiteRT-LM models inside an iPhone, iPad, or Mac app, but you do not want to spend your time packaging upstream Apple binaries by hand, this repository is for you.
 
-`LiteRT-LM-Apple` gives you a Swift Package Manager-friendly way to integrate the upstream LiteRT-LM iOS C API into Xcode. You get prebuilt XCFrameworks, a thin package surface, a reproducible rebuild pipeline, and a working sample app that downloads a model locally and runs on-device inference.
+`LiteRT-LM-Apple` gives you a Swift Package Manager-friendly way to integrate the upstream LiteRT-LM Apple C API into Xcode. You get prebuilt XCFrameworks, a thin package surface, a reproducible rebuild pipeline, and a working sample app that downloads a model locally and runs on-device inference.
 
-If your practical goal is to run Gemma 4 on an iPhone or iPad, this repository gives you a direct path to do that in a native iOS app.
+If your practical goal is to run Gemma 4 on an iPhone, iPad, or Apple Silicon Mac, this repository gives you a direct path to do that in a native SwiftUI app.
 
 ## Why This Repo Exists
 
 The upstream LiteRT-LM repository is source-first. This repository is integration-first.
 
-If you are evaluating on-device LLM inference for iOS, you usually want to answer questions like these quickly:
+If you are evaluating on-device LLM inference for Apple platforms, you usually want to answer questions like these quickly:
 
 - Can I add this to my Xcode project today?
 - Can I test model download and inference without inventing my own sample app first?
@@ -23,8 +23,9 @@ This repo is designed to let you answer "yes" to all three.
 - a Swift package product named `LiteRTLMApple`
 - prebuilt `LiteRTLMEngineCPU.xcframework` and `GemmaModelConstraintProvider.xcframework`
 - direct access to the upstream `engine.h` C API from Swift and Objective-C
-- a complete SwiftUI sample app for local model download and single-turn inference
-- a practical baseline for running Gemma 4 locally on iOS devices
+- official package support for iOS and Apple Silicon macOS
+- a complete SwiftUI sample app for local model download and single-turn inference on iPhone, iPad, and Mac
+- a practical baseline for running Gemma 4 locally on Apple devices
 - focused markdown documentation under `docs/` for integration, maintenance, and troubleshooting
 - structured Xcode console logging in the sample app so you can see runtime and download failures clearly
 - a one-command rebuild pipeline for refreshing the package from the pinned upstream revision
@@ -33,7 +34,7 @@ This repo is designed to let you answer "yes" to all three.
 
 This repository is a good fit if you want:
 
-- on-device LLM inference in an iOS app
+- on-device LLM inference in an iOS or macOS app
 - a Swift Package Manager dependency instead of a custom Xcode binary import flow
 - a thin wrapper around upstream LiteRT-LM, not a large opinionated SDK
 - a reproducible way to rebuild the Apple artifacts when upstream changes
@@ -52,6 +53,8 @@ If you want to integrate this package into another app, use the GitHub repositor
 
 - repository URL: `https://github.com/rogerioth/liteRT-LM-Apple.git`
 - current release: `v0.2.3`
+
+This feature branch adds macOS support ahead of the next release. The sample app on this branch intentionally resolves the package from `feat/macos-support` over GitHub SPM so you can validate the in-flight macOS package state before the next tag is published.
 
 In Xcode:
 
@@ -132,12 +135,14 @@ The example project in `Examples/LiteRTLMAppleExample/` shows the complete path 
 - run on-device inference from SwiftUI
 - inspect structured `print` logs in the Xcode console
 
+On this branch, the sample is configured as a universal SwiftUI app for iPhone, iPad, and Mac. Open it in Xcode and choose either `My Mac` or an iOS destination to exercise the same flow.
+
 The current sample app includes pinned Gemma 4 examples:
 
 - `Gemma 4 E2B` at about `2.58 GB`
 - `Gemma 4 E4B` at about `3.65 GB`
 
-That makes this repository a useful starting point if you want to put Gemma 4 directly on mobile iOS hardware instead of routing inference through a server.
+That makes this repository a useful starting point if you want to put Gemma 4 directly on Apple hardware instead of routing inference through a server.
 
 Open it here:
 
@@ -164,7 +169,7 @@ You can absolutely integrate LiteRT-LM by starting from upstream. This repositor
 
 In practice, that means:
 
-- you do not need to manually export the iOS shared engine dylib yourself
+- you do not need to manually export the iOS or macOS shared engine dylib yourself
 - you do not need to manually build and package XCFrameworks before trying the API
 - you still keep access to the original upstream C surface
 - you can refresh the package from a pinned upstream revision with one public entrypoint
@@ -183,7 +188,7 @@ That script orchestrates the internal subscripts and runs the full pipeline:
 2. checks out the pinned upstream revision
 3. fetches the required Git LFS-backed iOS prebuilts
 4. applies the local Apple export patch
-5. builds device and simulator dylibs with `bazelisk`
+5. builds iOS device, iOS simulator, and macOS dylibs with `bazelisk`
 6. creates fresh XCFrameworks
 7. refreshes the public `engine.h` header exposed by this package
 
@@ -247,10 +252,11 @@ Current published release:
 
 ## Compatibility Notes
 
-- The package manifest declares `iOS 13.0`.
-- The package is iOS-only.
-- The checked-in simulator XCFramework slices are `arm64` only.
+- The package manifest declares `iOS 13.0` and `macOS 14.0`.
+- The package supports iOS and Apple Silicon macOS.
+- The checked-in simulator and macOS XCFramework slices are `arm64` only.
 - The current `GemmaModelConstraintProvider` simulator slice has a minimum iOS simulator version of `26.2`, so recent simulator runtimes or a real device are the safest path when validating the sample app.
+- The current checked-in macOS slice has a minimum version of `14.0`.
 - The sample app is a reference integration, not a production framework.
 - Large LiteRT-LM model files require meaningful disk space and are better evaluated on real hardware when you care about latency.
 

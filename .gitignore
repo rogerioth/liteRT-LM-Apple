@@ -5,3 +5,4 @@ DerivedData/
 work/
 xcuserdata/
 .DS_Store
+*.profraw

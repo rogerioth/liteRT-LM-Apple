@@ -1,6 +1,6 @@
 # Troubleshooting
 
-This project is intentionally simple to consume, but a few issues show up repeatedly when developers evaluate local iOS inference.
+This project is intentionally simple to consume, but a few issues show up repeatedly when developers evaluate local Apple-device inference.
 
 ## The Package Resolves, But The Sample App Does Not Run In My Simulator
 
@@ -11,6 +11,15 @@ That means:
 - Apple Silicon simulator environments are the intended path
 - Intel simulator environments are not supported by the current checked-in slices
 
+## The Mac Build Is Unavailable On My Intel Machine
+
+The checked-in macOS slice is `arm64` only.
+
+That means:
+
+- Apple Silicon Macs are the intended path for native macOS validation
+- Intel Macs are not supported by the current checked-in package artifacts
+
 ## The Simulator Build Complains About Deployment Target Or Platform Versions
 
 The current `GemmaModelConstraintProvider` simulator slice has a minimum iOS simulator version of `26.2`.
@@ -19,6 +28,15 @@ If the simulator path is giving you trouble:
 
 - use a recent simulator runtime
 - or validate on a physical device instead
+
+## The Mac Build Succeeds, But The App Fails To Launch
+
+The sample app depends on dylibs that need to be discoverable from the app bundle at runtime.
+
+If you customize the sample target and break launch on macOS, make sure the target still includes:
+
+- `@executable_path/../Frameworks` in `LD_RUNPATH_SEARCH_PATHS`
+- the packaged dylibs inside `Contents/Frameworks`
 
 ## Downloads Fail Or Stop Midway
 

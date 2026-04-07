@@ -1,6 +1,6 @@
 # Integration Guide
 
-This package exists to make LiteRT-LM feel like a normal Swift Package Manager dependency in an iOS app.
+This package exists to make LiteRT-LM feel like a normal Swift Package Manager dependency in an iOS or macOS app.
 
 ## Add The Package
 
@@ -26,6 +26,14 @@ dependencies: [
 ]
 ```
 
+If you are evaluating this feature branch before the next tagged release, you can point SPM at the in-flight branch instead:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", branch: "feat/macos-support")
+]
+```
+
 ## What You Import
 
 ```swift
@@ -33,6 +41,12 @@ import LiteRTLMApple
 ```
 
 The package exposes the upstream LiteRT-LM C surface directly through the packaged headers and binary targets. It does not try to hide the upstream API behind a large Swift abstraction layer.
+
+## Platform Notes
+
+- This branch supports `iOS 13.0+`.
+- This branch supports Apple Silicon `macOS 14.0+`.
+- The checked-in simulator and macOS slices are `arm64` only.
 
 ## What Your App Needs To Provide
 
@@ -71,3 +85,4 @@ That path gives you:
 - inference execution
 - benchmark collection
 - Xcode console logging for downloads and runtime setup
+- one tested SwiftUI flow that now works on iPhone, iPad, and Mac

@@ -1,6 +1,6 @@
 # Sample App Guide
 
-The sample app under `Examples/LiteRTLMAppleExample/` is the fastest way to see this package doing useful work.
+The sample app under `Examples/LiteRTLMAppleExample/` is the fastest way to see this package doing useful work on iPhone, iPad, and Mac.
 
 ## What It Demonstrates
 
@@ -9,6 +9,7 @@ The sample app under `Examples/LiteRTLMAppleExample/` is the fastest way to see 
 - storing runtime cache data separately
 - running single-turn inference from SwiftUI
 - printing structured runtime and download logs into the Xcode console
+- resolving the package remotely through GitHub Swift Package Manager
 
 ## Current Pinned Models
 
@@ -24,6 +25,11 @@ These models are pinned in `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/M
 - `ModelStore.swift`: local file management and model downloads
 - `LiteRTLMRuntime.swift`: the Swift wrapper around the LiteRT-LM C API
 - `ConsoleLog.swift`: structured `print` logging for Xcode
+- `LiteRTLMAppleExample.xcodeproj/project.pbxproj`: the cross-platform target and SPM dependency settings
+
+## Current Branch Setup
+
+On `feat/macos-support`, the sample project resolves `LiteRTLMApple` from the matching GitHub branch instead of the last tagged release. That keeps the example closer to the real remote-consumption path while the macOS support work is still in flight.
 
 ## What To Change First
 
@@ -35,6 +41,6 @@ If you want to adapt the example for your own use, the most common starting poin
 
 ## Why The Sample Matters
 
-This repository is most compelling when it gets you from package installation to local Gemma 4 inference quickly.
+This repository is most compelling when it gets you from package installation to local Gemma 4 inference quickly on the Apple device you already have in front of you.
 
 The example app is where that promise becomes concrete.
