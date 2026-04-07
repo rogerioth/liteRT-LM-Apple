@@ -1,6 +1,6 @@
 # Sample App Guide
 
-The sample app under `Examples/LiteRTLMAppleExample/` is the fastest way to see this package doing useful work on iPhone, iPad, and Mac.
+The sample app under `Examples/LiteRTLMAppleExample/` is the fastest way to see this package doing useful work on iPhone, iPad, native Mac, and Mac Catalyst.
 
 ## What It Demonstrates
 
@@ -29,7 +29,7 @@ These models are pinned in `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/M
 
 ## Current Branch Setup
 
-On `feat/macos-support`, the sample project resolves `LiteRTLMApple` from the matching GitHub branch instead of the last tagged release. That keeps the example closer to the real remote-consumption path while the macOS support work is still in flight.
+On `feat/maccatalyst-support`, the sample project resolves `LiteRTLMApple` from the matching GitHub branch instead of the last tagged release. That keeps the example closer to the real remote-consumption path while the Mac Catalyst support work is still in flight.
 
 ## What To Change First
 

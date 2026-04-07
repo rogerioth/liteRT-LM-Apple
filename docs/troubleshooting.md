@@ -20,6 +20,15 @@ That means:
 - Apple Silicon Macs are the intended path for native macOS validation
 - Intel Macs are not supported by the current checked-in package artifacts
 
+## The Mac Catalyst Build Is Unavailable On My Intel Machine
+
+The checked-in Mac Catalyst slice is also `arm64` only.
+
+That means:
+
+- Apple Silicon Macs are the intended path for Catalyst validation
+- Intel Macs are not supported by the current checked-in Catalyst artifact
+
 ## The Simulator Build Complains About Deployment Target Or Platform Versions
 
 The current `GemmaModelConstraintProvider` simulator slice has a minimum iOS simulator version of `26.2`.
@@ -28,6 +37,16 @@ If the simulator path is giving you trouble:
 
 - use a recent simulator runtime
 - or validate on a physical device instead
+
+## The Catalyst Build Complains About Deployment Target Or Platform Versions
+
+The current Mac Catalyst slice is derived from the Apple Silicon iOS simulator dylib.
+
+That means:
+
+- it currently inherits the iOS-family deployment floor from the packaged simulator binary
+- recent Mac Catalyst runtimes on current Xcode releases are the intended validation path
+- native macOS is the safer path if you need the lowest-friction Mac validation today
 
 ## The Mac Build Succeeds, But The App Fails To Launch
 
