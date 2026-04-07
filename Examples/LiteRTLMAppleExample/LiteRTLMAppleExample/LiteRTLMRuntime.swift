@@ -28,6 +28,13 @@ protocol LiteRTLMRuntimeProtocol: Sendable {
 }
 
 struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
+    private struct RuntimeProfile {
+        let maxNumTokens: Int32
+        let prefillChunkSize: Int32
+        let maxOutputTokens: Int32
+        let benchmarkEnabled: Bool
+    }
+
     func generateResponse(
         modelURL: URL,
         cacheDirectory: URL,
@@ -51,11 +58,16 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         cacheDirectory: URL,
         prompt: String
     ) throws -> InferenceResult {
+        let runtimeProfile = Self.runtimeProfile
         ConsoleLog.info(
             "Starting synchronous inference. model=\(modelURL.path) cache=\(cacheDirectory.path).",
             category: "Runtime"
         )
         ConsoleLog.debug("Prompt preview=\(ConsoleLog.preview(prompt)).", category: "Runtime")
+        ConsoleLog.debug(
+            "Runtime profile max_num_tokens=\(runtimeProfile.maxNumTokens) prefill_chunk_size=\(runtimeProfile.prefillChunkSize) max_output_tokens=\(runtimeProfile.maxOutputTokens) benchmark=\(runtimeProfile.benchmarkEnabled).",
+            category: "Runtime"
+        )
         litert_lm_set_min_log_level(1)
 
         try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
@@ -73,10 +85,15 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         defer { litert_lm_engine_settings_delete(settings) }
         ConsoleLog.info("Created engine settings for CPU backend.", category: "Runtime")
 
-        litert_lm_engine_settings_set_max_num_tokens(settings, 1024)
-        litert_lm_engine_settings_set_prefill_chunk_size(settings, 256)
-        litert_lm_engine_settings_enable_benchmark(settings)
-        ConsoleLog.debug("Applied engine settings: max_num_tokens=1024 prefill_chunk_size=256 benchmark=enabled.", category: "Runtime")
+        litert_lm_engine_settings_set_max_num_tokens(settings, runtimeProfile.maxNumTokens)
+        litert_lm_engine_settings_set_prefill_chunk_size(settings, runtimeProfile.prefillChunkSize)
+        if runtimeProfile.benchmarkEnabled {
+            litert_lm_engine_settings_enable_benchmark(settings)
+        }
+        ConsoleLog.debug(
+            "Applied engine settings: max_num_tokens=\(runtimeProfile.maxNumTokens) prefill_chunk_size=\(runtimeProfile.prefillChunkSize) benchmark=\(runtimeProfile.benchmarkEnabled).",
+            category: "Runtime"
+        )
 
         cacheDirectory.path.withCString { cachePointer in
             litert_lm_engine_settings_set_cache_dir(settings, cachePointer)
@@ -95,8 +112,11 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         defer { litert_lm_session_config_delete(sessionConfig) }
         ConsoleLog.info("Created session config.", category: "Runtime")
 
-        litert_lm_session_config_set_max_output_tokens(sessionConfig, 256)
-        ConsoleLog.debug("Configured session max_output_tokens=256.", category: "Runtime")
+        litert_lm_session_config_set_max_output_tokens(sessionConfig, runtimeProfile.maxOutputTokens)
+        ConsoleLog.debug(
+            "Configured session max_output_tokens=\(runtimeProfile.maxOutputTokens).",
+            category: "Runtime"
+        )
 
         let systemMessageJSON =
             #"{"type":"text","text":"You are a concise assistant running entirely on-device. Answer clearly and directly."}"#
@@ -176,6 +196,26 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         }
 
         return InferenceResult(text: generatedText, benchmark: benchmark)
+    }
+
+    private static var runtimeProfile: RuntimeProfile {
+        #if os(tvOS)
+        // Apple TV hardware has a tighter memory budget than newer iPhone, iPad,
+        // and Mac targets, so keep the runtime profile conservative there.
+        RuntimeProfile(
+            maxNumTokens: 128,
+            prefillChunkSize: 32,
+            maxOutputTokens: 48,
+            benchmarkEnabled: false
+        )
+        #else
+        RuntimeProfile(
+            maxNumTokens: 1024,
+            prefillChunkSize: 256,
+            maxOutputTokens: 256,
+            benchmarkEnabled: true
+        )
+        #endif
     }
 
     private static func makeUserMessageJSON(prompt: String) throws -> String {

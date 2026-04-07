@@ -46,13 +46,26 @@ struct ModelStore {
     private let fileManager = FileManager.default
 
     var modelsDirectory: URL {
-        let root = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return root.appendingPathComponent("LiteRTLMAppleExample/Models", isDirectory: true)
+        storageRootDirectory.appendingPathComponent("Models", isDirectory: true)
     }
 
     var cacheDirectory: URL {
+        #if os(tvOS)
+        return storageRootDirectory.appendingPathComponent("RuntimeCache", isDirectory: true)
+        #else
         let root = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         return root.appendingPathComponent("LiteRTLMAppleExample/Cache", isDirectory: true)
+        #endif
+    }
+
+    private var storageRootDirectory: URL {
+        #if os(tvOS)
+        let root = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        return root.appendingPathComponent("LiteRTLMAppleExample", isDirectory: true)
+        #else
+        let root = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return root.appendingPathComponent("LiteRTLMAppleExample", isDirectory: true)
+        #endif
     }
 
     func localURL(for model: ExampleModelDescriptor) -> URL {
@@ -117,8 +130,20 @@ struct ModelStore {
     }
 
     private func prepareDirectories() throws {
-        try prepareDirectory(modelsDirectory, excludeFromBackup: true)
-        try prepareDirectory(cacheDirectory, excludeFromBackup: true)
+        try prepareDirectory(modelsDirectory, excludeFromBackup: shouldExcludeModelsFromBackup)
+        try prepareDirectory(cacheDirectory, excludeFromBackup: false)
+        ConsoleLog.debug(
+            "Prepared storage directories. models=\(modelsDirectory.path) cache=\(cacheDirectory.path).",
+            category: "ModelStore"
+        )
+    }
+
+    private var shouldExcludeModelsFromBackup: Bool {
+        #if os(tvOS)
+        false
+        #else
+        true
+        #endif
     }
 
     private func prepareDirectory(_ url: URL, excludeFromBackup: Bool) throws {

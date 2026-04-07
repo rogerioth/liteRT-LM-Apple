@@ -14,7 +14,10 @@ final class InferenceViewModel: ObservableObject {
 
     private let modelStore: ModelStore
     private let runtime: LiteRTLMRuntimeProtocol
+    private let automation = SampleAutomation.current
     private var hasStarted = false
+    private var hasAttemptedAutomationDownload = false
+    private var hasAttemptedAutomationInference = false
 
     init(
         modelStore: ModelStore = ModelStore(),
@@ -26,6 +29,9 @@ final class InferenceViewModel: ObservableObject {
             "Initialized with default model \(selectedModel.displayName) (\(selectedModel.fileName), \(selectedModel.sizeDescription)).",
             category: "ViewModel"
         )
+        if automation.isEnabled {
+            ConsoleLog.info("Launch automation is enabled: \(automation.summary).", category: "Automation")
+        }
     }
 
     var statusTitle: String {
@@ -98,8 +104,10 @@ final class InferenceViewModel: ObservableObject {
     func startIfNeeded() {
         guard !hasStarted else { return }
         hasStarted = true
+        applyAutomationConfigurationIfNeeded()
         ConsoleLog.info("App startup detected. Refreshing local model state.", category: "ViewModel")
         refreshLocalModelState()
+        runAutomationIfNeeded(trigger: "startup")
     }
 
     func selectModel(_ model: ExampleModelDescriptor) {
@@ -168,6 +176,8 @@ final class InferenceViewModel: ObservableObject {
 
             if localModelURL == nil {
                 downloadProgress = nil
+            } else {
+                runAutomationIfNeeded(trigger: "download-complete")
             }
         }
     }
@@ -269,6 +279,68 @@ final class InferenceViewModel: ObservableObject {
         }
     }
 
+    private func applyAutomationConfigurationIfNeeded() {
+        guard automation.isEnabled else { return }
+
+        if let requestedModel = automation.requestedModel {
+            if requestedModel == selectedModel {
+                ConsoleLog.debug(
+                    "Automation requested model \(requestedModel.displayName), which is already selected.",
+                    category: "Automation"
+                )
+            } else {
+                ConsoleLog.info(
+                    "Automation selected model \(requestedModel.displayName) (\(requestedModel.fileName)).",
+                    category: "Automation"
+                )
+                selectedModel = requestedModel
+                response = ""
+                benchmark = nil
+                errorMessage = ""
+                downloadProgress = nil
+            }
+        } else if let requestedModelName = automation.requestedModelName {
+            ConsoleLog.error(
+                "Automation requested unknown model '\(requestedModelName)'. Using default selection instead.",
+                category: "Automation"
+            )
+        }
+
+        if let promptOverride = automation.promptOverride,
+           promptOverride != prompt {
+            setPrompt(promptOverride, source: "launch automation")
+        }
+    }
+
+    private func runAutomationIfNeeded(trigger: String) {
+        guard automation.isEnabled else { return }
+
+        if automation.autoDownload,
+           localModelURL == nil,
+           !isDownloading,
+           !hasAttemptedAutomationDownload {
+            hasAttemptedAutomationDownload = true
+            ConsoleLog.info(
+                "Automation requested model download during \(trigger).",
+                category: "Automation"
+            )
+            downloadSelectedModel()
+            return
+        }
+
+        if automation.autoRunInference,
+           localModelURL != nil,
+           !isRunning,
+           !hasAttemptedAutomationInference {
+            hasAttemptedAutomationInference = true
+            ConsoleLog.info(
+                "Automation requested inference during \(trigger).",
+                category: "Automation"
+            )
+            runInference()
+        }
+    }
+
     private static func describe(_ error: Error) -> String {
         if let localizedError = error as? LocalizedError,
            let description = localizedError.errorDescription {
@@ -276,5 +348,69 @@ final class InferenceViewModel: ObservableObject {
         }
 
         return String(describing: error)
+    }
+}
+
+private struct SampleAutomation {
+    let autoDownload: Bool
+    let autoRunInference: Bool
+    let promptOverride: String?
+    let requestedModelName: String?
+
+    static let current = SampleAutomation(processInfo: .processInfo)
+
+    init(processInfo: ProcessInfo) {
+        let environment = processInfo.environment
+        autoDownload = Self.flag("LITERT_SAMPLE_AUTO_DOWNLOAD", in: environment)
+        autoRunInference = Self.flag("LITERT_SAMPLE_AUTO_RUN_INFERENCE", in: environment)
+        promptOverride = Self.trimmedValue(for: "LITERT_SAMPLE_PROMPT", in: environment)
+        requestedModelName = Self.trimmedValue(for: "LITERT_SAMPLE_MODEL", in: environment)
+    }
+
+    var isEnabled: Bool {
+        autoDownload || autoRunInference || promptOverride != nil || requestedModelName != nil
+    }
+
+    var requestedModel: ExampleModelDescriptor? {
+        guard let requestedModelName else { return nil }
+
+        return ExampleModelCatalog.all.first { model in
+            model.fileName.caseInsensitiveCompare(requestedModelName) == .orderedSame ||
+            model.displayName.caseInsensitiveCompare(requestedModelName) == .orderedSame
+        }
+    }
+
+    var summary: String {
+        var parts: [String] = []
+        if autoDownload {
+            parts.append("auto_download=true")
+        }
+        if autoRunInference {
+            parts.append("auto_run_inference=true")
+        }
+        if let requestedModelName {
+            parts.append("model=\(requestedModelName)")
+        }
+        if let promptOverride {
+            parts.append("prompt_chars=\(promptOverride.count)")
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    private static func flag(_ key: String, in environment: [String: String]) -> Bool {
+        guard let value = environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
+            return false
+        }
+
+        return value == "1" || value == "true" || value == "yes" || value == "on"
+    }
+
+    private static func trimmedValue(for key: String, in environment: [String: String]) -> String? {
+        guard let rawValue = environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawValue.isEmpty else {
+            return nil
+        }
+
+        return rawValue
     }
 }
