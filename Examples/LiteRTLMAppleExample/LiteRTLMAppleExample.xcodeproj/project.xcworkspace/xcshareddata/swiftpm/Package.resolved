@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/rogerioth/liteRT-LM-Apple.git",
       "state" : {
-        "branch" : "feat/maccatalyst-support",
-        "revision" : "b5e76c7f70ca093b01e92b83be1021e39ab6d675"
+        "branch" : "feat/visionos-support",
+        "revision" : "f1896bf6dec70a7c0eb48f1aec582d82834a707f"
       }
     }
   ],
