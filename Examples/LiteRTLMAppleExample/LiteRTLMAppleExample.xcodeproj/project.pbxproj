@@ -71,6 +71,7 @@
 			buildPhases = (
 				AEDD28172D8914DE69BC294C /* Sources */,
 				B9340BB110FECCEBE4F05847 /* Frameworks */,
+				E27BC12EAF4D4C5EA91E6110 /* Sign Embedded Dylibs */,
 				82993DFC1359E219B7D66017 /* Resources */,
 			);
 			buildRules = (
@@ -129,6 +130,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		E27BC12EAF4D4C5EA91E6110 /* Sign Embedded Dylibs */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Sign Embedded Dylibs";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\n\nif [ \"${CODE_SIGNING_ALLOWED:-NO}\" != \"YES\" ]; then\n  echo \"Code signing is disabled; skipping embedded dylib signing.\"\n  exit 0\nfi\n\nif [ -z \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n  echo \"No code signing identity available; skipping embedded dylib signing.\"\n  exit 0\nfi\n\nFRAMEWORKS_DIR=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nif [ ! -d \"$FRAMEWORKS_DIR\" ]; then\n  echo \"No Frameworks directory at $FRAMEWORKS_DIR; skipping embedded dylib signing.\"\n  exit 0\nfi\n\nFOUND_DYLIB=0\nfor dylib in \"$FRAMEWORKS_DIR\"/*.dylib; do\n  [ -e \"$dylib\" ] || continue\n  FOUND_DYLIB=1\n  echo \"Signing embedded dylib: $(basename \"$dylib\")\"\n  /usr/bin/codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none --generate-entitlement-der \"$dylib\"\ndone\n\nif [ \"$FOUND_DYLIB\" -eq 0 ]; then\n  echo \"No embedded dylibs found to sign.\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AEDD28172D8914DE69BC294C /* Sources */ = {
