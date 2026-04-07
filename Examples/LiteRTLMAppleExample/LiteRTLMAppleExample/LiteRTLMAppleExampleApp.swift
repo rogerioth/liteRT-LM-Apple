@@ -8,5 +8,8 @@ struct LiteRTLMAppleExampleApp: App {
         WindowGroup {
             ContentView(viewModel: viewModel)
         }
+#if os(macOS)
+        .defaultSize(width: 920, height: 760)
+#endif
     }
 }

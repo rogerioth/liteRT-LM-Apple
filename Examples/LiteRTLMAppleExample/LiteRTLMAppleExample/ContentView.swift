@@ -1,4 +1,9 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 struct ContentView: View {
     @ObservedObject var viewModel: InferenceViewModel
@@ -20,17 +25,19 @@ struct ContentView: View {
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(Color.appGroupedBackground)
             .navigationTitle("LiteRT-LM")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem {
                     Link(destination: viewModel.selectedModel.huggingFacePageURL) {
                         Image(systemName: "info.circle")
                     }
                     .accessibilityLabel("Model source")
                 }
             }
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
         }
         .task { viewModel.startIfNeeded() }
     }
@@ -181,7 +188,7 @@ struct ContentView: View {
 
                 ZStack(alignment: .topLeading) {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(uiColor: .secondarySystemBackground))
+                        .fill(Color.appSecondaryBackground)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .strokeBorder(Color.primary.opacity(0.08))
@@ -243,21 +250,21 @@ struct ContentView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
-                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 } else if viewModel.response.isEmpty {
                     Text("No response yet. Download a model, enter a prompt, and run inference.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
-                        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 } else {
                     Text(viewModel.response)
                         .font(.footnote)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
-                        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
         }
@@ -290,7 +297,7 @@ private struct Card<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                    .fill(Color.appCardBackground)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -334,6 +341,32 @@ private struct InfoRow: View {
                 .truncationMode(.middle)
                 .textSelection(.enabled)
         }
+    }
+}
+
+private extension Color {
+    static var appGroupedBackground: Color {
+#if os(macOS)
+        Color(nsColor: .windowBackgroundColor)
+#else
+        Color(uiColor: .systemGroupedBackground)
+#endif
+    }
+
+    static var appSecondaryBackground: Color {
+#if os(macOS)
+        Color(nsColor: .controlBackgroundColor)
+#else
+        Color(uiColor: .secondarySystemBackground)
+#endif
+    }
+
+    static var appCardBackground: Color {
+#if os(macOS)
+        Color(nsColor: .underPageBackgroundColor)
+#else
+        Color(uiColor: .secondarySystemGroupedBackground)
+#endif
     }
 }
 
