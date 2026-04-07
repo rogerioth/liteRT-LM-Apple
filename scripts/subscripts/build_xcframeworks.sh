@@ -51,12 +51,14 @@ extract_build_setting() {
   xcrun vtool -show-build "${input}" | awk -v key="${setting}" '$1 == key { print $2; exit }'
 }
 
-retag_as_maccatalyst() {
-  local input="$1"
-  local output="$2"
+retag_build_version() {
+  local platform="$1"
+  local input="$2"
+  local output="$3"
+  local minos_override="${4:-}"
   local minos sdk
 
-  minos="$(extract_build_setting "${input}" minos)"
+  minos="${minos_override:-$(extract_build_setting "${input}" minos)}"
   sdk="$(extract_build_setting "${input}" sdk)"
 
   if [[ -z "${minos}" || -z "${sdk}" ]]; then
@@ -65,7 +67,7 @@ retag_as_maccatalyst() {
   fi
 
   xcrun vtool \
-    -set-build-version maccatalyst "${minos}" "${sdk}" \
+    -set-build-version "${platform}" "${minos}" "${sdk}" \
     -replace \
     -output "${output}" \
     "${input}" >/dev/null 2>&1
@@ -88,10 +90,14 @@ device_engine_staged="${tmp_dir}/ios-arm64/libLiteRTLMEngineCPU.dylib"
 sim_engine_staged="${tmp_dir}/ios-arm64-simulator/libLiteRTLMEngineCPU.dylib"
 catalyst_engine_staged="${tmp_dir}/ios-arm64-maccatalyst/libLiteRTLMEngineCPU.dylib"
 mac_engine_staged="${tmp_dir}/macos-arm64/libLiteRTLMEngineCPU.dylib"
+vision_engine_staged="${tmp_dir}/xros-arm64/libLiteRTLMEngineCPU.dylib"
+vision_sim_engine_staged="${tmp_dir}/xros-arm64-simulator/libLiteRTLMEngineCPU.dylib"
 device_constraint_staged="${tmp_dir}/ios-arm64/libGemmaModelConstraintProvider.dylib"
 sim_constraint_staged="${tmp_dir}/ios-arm64-simulator/libGemmaModelConstraintProvider.dylib"
 catalyst_constraint_staged="${tmp_dir}/ios-arm64-maccatalyst/libGemmaModelConstraintProvider.dylib"
 mac_constraint_staged="${tmp_dir}/macos-arm64/libGemmaModelConstraintProvider.dylib"
+vision_constraint_staged="${tmp_dir}/xros-arm64/libGemmaModelConstraintProvider.dylib"
+vision_sim_constraint_staged="${tmp_dir}/xros-arm64-simulator/libGemmaModelConstraintProvider.dylib"
 headers_staged="${tmp_dir}/Headers"
 engine_placeholder_headers_staged="${tmp_dir}/EnginePlaceholderHeaders"
 constraint_placeholder_headers_staged="${tmp_dir}/ConstraintPlaceholderHeaders"
@@ -101,6 +107,8 @@ mkdir -p \
   "$(dirname "${sim_engine_staged}")" \
   "$(dirname "${catalyst_engine_staged}")" \
   "$(dirname "${mac_engine_staged}")" \
+  "$(dirname "${vision_engine_staged}")" \
+  "$(dirname "${vision_sim_engine_staged}")" \
   "${headers_staged}" \
   "${engine_placeholder_headers_staged}" \
   "${constraint_placeholder_headers_staged}"
@@ -121,12 +129,18 @@ install -m 0755 "${device_engine_input}" "${device_engine_staged}"
 install -m 0755 "${sim_engine_input}" "${sim_engine_staged}"
 # Upstream does not publish dedicated Mac Catalyst dylibs, so derive a
 # maccatalyst slice from the Apple Silicon iOS simulator build.
-retag_as_maccatalyst "${sim_engine_input}" "${catalyst_engine_staged}"
+retag_build_version maccatalyst "${sim_engine_input}" "${catalyst_engine_staged}"
 install -m 0755 "${mac_engine_input}" "${mac_engine_staged}"
+# Upstream also does not publish dedicated visionOS dylibs, so derive the
+# device and simulator slices from the existing iOS outputs.
+retag_build_version visionos "${device_engine_input}" "${vision_engine_staged}" "1.0"
+retag_build_version visionossim "${sim_engine_input}" "${vision_sim_engine_staged}" "1.0"
 install -m 0755 "${device_constraint_input}" "${device_constraint_staged}"
 install -m 0755 "${sim_constraint_input}" "${sim_constraint_staged}"
-retag_as_maccatalyst "${sim_constraint_input}" "${catalyst_constraint_staged}"
+retag_build_version maccatalyst "${sim_constraint_input}" "${catalyst_constraint_staged}"
 install -m 0755 "${mac_constraint_input}" "${mac_constraint_staged}"
+retag_build_version visionos "${device_constraint_input}" "${vision_constraint_staged}" "1.0"
+retag_build_version visionossim "${sim_constraint_input}" "${vision_sim_constraint_staged}" "1.0"
 
 rm -rf \
   "${artifacts_dir}/LiteRTLMEngineCPU.xcframework" \
@@ -137,6 +151,8 @@ xcodebuild -create-xcframework \
   -library "${sim_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
   -library "${catalyst_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
   -library "${mac_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
+  -library "${vision_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
+  -library "${vision_sim_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
   -output "${artifacts_dir}/LiteRTLMEngineCPU.xcframework"
 
 xcodebuild -create-xcframework \
@@ -144,6 +160,8 @@ xcodebuild -create-xcframework \
   -library "${sim_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -library "${catalyst_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -library "${mac_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
+  -library "${vision_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
+  -library "${vision_sim_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -output "${artifacts_dir}/GemmaModelConstraintProvider.xcframework"
 
 echo "Updated package artifacts:"
