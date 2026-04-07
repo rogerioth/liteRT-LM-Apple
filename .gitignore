@@ -3,3 +3,5 @@
 .worktree/
 DerivedData/
 work/
+xcuserdata/
+.DS_Store

@@ -25,6 +25,7 @@ This repo is designed to let you answer "yes" to all three.
 - direct access to the upstream `engine.h` C API from Swift and Objective-C
 - a complete SwiftUI sample app for local model download and single-turn inference
 - a practical baseline for running Gemma 4 locally on iOS devices
+- focused markdown documentation under `docs/` for integration, maintenance, and troubleshooting
 - structured Xcode console logging in the sample app so you can see runtime and download failures clearly
 - a one-command rebuild pipeline for refreshing the package from the pinned upstream revision
 
@@ -50,7 +51,7 @@ This repository is probably not what you want if you are looking for:
 If you want to integrate this package into another app, use the GitHub repository URL and a tagged release.
 
 - repository URL: `https://github.com/rogerioth/liteRT-LM-Apple.git`
-- current release: `v0.2.0`
+- current release: `v0.2.3`
 
 In Xcode:
 
@@ -58,14 +59,14 @@ In Xcode:
 2. Choose `File` -> `Add Package Dependencies...`.
 3. Enter `https://github.com/rogerioth/liteRT-LM-Apple.git`.
 4. Select `Up to Next Minor Version`.
-5. Set the version to `0.2.0`.
+5. Set the version to `0.2.3`.
 6. Link the `LiteRTLMApple` product to your app target.
 
 In `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.2.0")
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.2.3")
 ]
 ```
 
@@ -148,6 +149,15 @@ If you want to point the sample at different models, update:
 
 `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/ModelCatalog.swift`
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/example-overview.jpg" alt="LiteRT-LM Apple example app overview screen" width="280" />
+  <img src="docs/images/example-chat.jpg" alt="LiteRT-LM Apple example app prompt and response screen" width="280" />
+</p>
+
+These screenshots show the current example app flow for selecting a local model, downloading it to the device, and running on-device inference from SwiftUI.
+
 ## Why Developers Use This Instead Of Wiring Up Upstream Directly
 
 You can absolutely integrate LiteRT-LM by starting from upstream. This repository is useful when you want to move faster and keep the Apple packaging work out of your application repository.
@@ -201,7 +211,18 @@ Updated outputs land in:
 | `patches/0001-export-ios-shared-engine-dylib.patch` | Local patch applied before packaging |
 | `scripts/buildall.sh` | Public one-pass rebuild entrypoint |
 | `scripts/subscripts/` | Internal clone, patch, build, and packaging helpers |
+| `docs/` | Extra markdown documentation and screenshots for developers evaluating the package |
 | `Examples/LiteRTLMAppleExample/` | SwiftUI sample app for download and inference |
+
+## Documentation
+
+If you want a deeper view than the main README, start here:
+
+- [`docs/README.md`](docs/README.md) for the documentation index
+- [`docs/integration-guide.md`](docs/integration-guide.md) for package integration guidance
+- [`docs/sample-app.md`](docs/sample-app.md) for the example app structure and extension points
+- [`docs/maintenance-guide.md`](docs/maintenance-guide.md) for rebuild and release workflow details
+- [`docs/troubleshooting.md`](docs/troubleshooting.md) for common simulator, build, and model-size issues
 
 ## Related Repositories
 
@@ -216,7 +237,7 @@ Swift Package Manager resolves this package from Git tags. If you are integratin
 
 Current published release:
 
-- `v0.2.0`
+- `v0.2.3`
 
 ## Upstream Pin
 
