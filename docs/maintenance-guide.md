@@ -19,8 +19,9 @@ That top-level script is the public entrypoint. It delegates to the helper scrip
 3. Fetches Git LFS-backed prebuilt dependencies required by upstream.
 4. Applies the local export patch.
 5. Builds iOS device, iOS simulator, and macOS dylibs with `bazelisk`.
-6. Repackages them as XCFrameworks.
-7. Refreshes the public `engine.h` header exposed by this package.
+6. Derives an Apple Silicon Mac Catalyst slice from the iOS simulator dylib.
+7. Repackages them as XCFrameworks.
+8. Refreshes the public `engine.h` header exposed by this package.
 
 ## When To Run It
 
@@ -49,3 +50,5 @@ If the sample project is temporarily following a feature branch through remote S
 - `Artifacts/GemmaModelConstraintProvider.xcframework`
 - `Sources/LiteRTLMApple/include/engine.h`
 - `README.md` when user-facing setup or compatibility notes change
+
+The current Catalyst packaging is intentionally explicit about an upstream limitation: LiteRT-LM does not publish dedicated Catalyst dylibs today, so this repository derives the Catalyst slice from the Apple Silicon iOS simulator dylib and validates it through Xcode.

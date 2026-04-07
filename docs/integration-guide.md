@@ -1,6 +1,6 @@
 # Integration Guide
 
-This package exists to make LiteRT-LM feel like a normal Swift Package Manager dependency in an iOS or macOS app.
+This package exists to make LiteRT-LM feel like a normal Swift Package Manager dependency in an iOS, macOS, or Mac Catalyst app.
 
 ## Add The Package
 
@@ -30,7 +30,7 @@ If you are evaluating this feature branch before the next tagged release, you ca
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", branch: "feat/macos-support")
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", branch: "feat/maccatalyst-support")
 ]
 ```
 
@@ -46,7 +46,9 @@ The package exposes the upstream LiteRT-LM C surface directly through the packag
 
 - This branch supports `iOS 13.0+`.
 - This branch supports Apple Silicon `macOS 14.0+`.
-- The checked-in simulator and macOS slices are `arm64` only.
+- This branch supports Apple Silicon Mac Catalyst.
+- The checked-in simulator, Mac Catalyst, and macOS slices are `arm64` only.
+- The current Mac Catalyst slice is derived from the Apple Silicon iOS simulator dylib because upstream does not publish a dedicated Catalyst binary yet.
 
 ## What Your App Needs To Provide
 
@@ -85,4 +87,4 @@ That path gives you:
 - inference execution
 - benchmark collection
 - Xcode console logging for downloads and runtime setup
-- one tested SwiftUI flow that now works on iPhone, iPad, and Mac
+- one tested SwiftUI flow that now works on iPhone, iPad, native Mac, and Mac Catalyst

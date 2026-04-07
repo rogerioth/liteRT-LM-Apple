@@ -1,6 +1,6 @@
 # LiteRT-LM-Apple
 
-If you want to run LiteRT-LM models inside an iPhone, iPad, or Mac app, but you do not want to spend your time packaging upstream Apple binaries by hand, this repository is for you.
+If you want to run LiteRT-LM models inside an iPhone, iPad, Mac, or Mac Catalyst app, but you do not want to spend your time packaging upstream Apple binaries by hand, this repository is for you.
 
 `LiteRT-LM-Apple` gives you a Swift Package Manager-friendly way to integrate the upstream LiteRT-LM Apple C API into Xcode. You get prebuilt XCFrameworks, a thin package surface, a reproducible rebuild pipeline, and a working sample app that downloads a model locally and runs on-device inference.
 
@@ -23,8 +23,8 @@ This repo is designed to let you answer "yes" to all three.
 - a Swift package product named `LiteRTLMApple`
 - prebuilt `LiteRTLMEngineCPU.xcframework` and `GemmaModelConstraintProvider.xcframework`
 - direct access to the upstream `engine.h` C API from Swift and Objective-C
-- official package support for iOS and Apple Silicon macOS
-- a complete SwiftUI sample app for local model download and single-turn inference on iPhone, iPad, and Mac
+- official package support for iOS, Apple Silicon macOS, and Apple Silicon Mac Catalyst
+- a complete SwiftUI sample app for local model download and single-turn inference on iPhone, iPad, native Mac, and Mac Catalyst
 - a practical baseline for running Gemma 4 locally on Apple devices
 - focused markdown documentation under `docs/` for integration, maintenance, and troubleshooting
 - structured Xcode console logging in the sample app so you can see runtime and download failures clearly
@@ -54,7 +54,7 @@ If you want to integrate this package into another app, use the GitHub repositor
 - repository URL: `https://github.com/rogerioth/liteRT-LM-Apple.git`
 - current release: `v0.2.3`
 
-This feature branch adds macOS support ahead of the next release. The sample app on this branch intentionally resolves the package from `feat/macos-support` over GitHub SPM so you can validate the in-flight macOS package state before the next tag is published.
+This feature branch adds Mac Catalyst support ahead of the next release. The sample app on this branch intentionally resolves the package from `feat/maccatalyst-support` over GitHub SPM so you can validate the in-flight package state before the next tag is published.
 
 In Xcode:
 
@@ -135,7 +135,7 @@ The example project in `Examples/LiteRTLMAppleExample/` shows the complete path 
 - run on-device inference from SwiftUI
 - inspect structured `print` logs in the Xcode console
 
-On this branch, the sample is configured as a universal SwiftUI app for iPhone, iPad, and Mac. Open it in Xcode and choose either `My Mac` or an iOS destination to exercise the same flow.
+On this branch, the sample is configured as a universal SwiftUI app for iPhone, iPad, native Mac, and Mac Catalyst. Open it in Xcode and choose `My Mac`, a Mac Catalyst destination, or an iOS destination to exercise the same flow.
 
 The current sample app includes pinned Gemma 4 examples:
 
@@ -189,8 +189,9 @@ That script orchestrates the internal subscripts and runs the full pipeline:
 3. fetches the required Git LFS-backed iOS prebuilts
 4. applies the local Apple export patch
 5. builds iOS device, iOS simulator, and macOS dylibs with `bazelisk`
-6. creates fresh XCFrameworks
-7. refreshes the public `engine.h` header exposed by this package
+6. derives an Apple Silicon Mac Catalyst slice from the iOS simulator dylib because upstream does not ship a dedicated Catalyst binary yet
+7. creates fresh XCFrameworks
+8. refreshes the public `engine.h` header exposed by this package
 
 ### Requirements
 
@@ -253,9 +254,10 @@ Current published release:
 ## Compatibility Notes
 
 - The package manifest declares `iOS 13.0` and `macOS 14.0`.
-- The package supports iOS and Apple Silicon macOS.
-- The checked-in simulator and macOS XCFramework slices are `arm64` only.
-- The current `GemmaModelConstraintProvider` simulator slice has a minimum iOS simulator version of `26.2`, so recent simulator runtimes or a real device are the safest path when validating the sample app.
+- The package supports iOS, Apple Silicon native macOS, and Apple Silicon Mac Catalyst.
+- The checked-in simulator, Mac Catalyst, and macOS XCFramework slices are `arm64` only.
+- The current `GemmaModelConstraintProvider` simulator and Mac Catalyst slices have a minimum iOS-family version of `26.2`, so recent simulator or Catalyst runtimes, a real iOS device, or a native Mac build are the safest validation paths.
+- The current Mac Catalyst slice is derived from the Apple Silicon iOS simulator dylib because upstream does not publish a dedicated Catalyst binary yet.
 - The current checked-in macOS slice has a minimum version of `14.0`.
 - The sample app is a reference integration, not a production framework.
 - Large LiteRT-LM model files require meaningful disk space and are better evaluated on real hardware when you care about latency.
