@@ -6,6 +6,7 @@ let package = Package(
     name: "LiteRTLMApple",
     platforms: [
         .iOS(.v13),
+        .tvOS(.v13),
         .macOS(.v14),
         .visionOS(.v1),
     ],

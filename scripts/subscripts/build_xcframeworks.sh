@@ -92,12 +92,16 @@ catalyst_engine_staged="${tmp_dir}/ios-arm64-maccatalyst/libLiteRTLMEngineCPU.dy
 mac_engine_staged="${tmp_dir}/macos-arm64/libLiteRTLMEngineCPU.dylib"
 vision_engine_staged="${tmp_dir}/xros-arm64/libLiteRTLMEngineCPU.dylib"
 vision_sim_engine_staged="${tmp_dir}/xros-arm64-simulator/libLiteRTLMEngineCPU.dylib"
+tvos_engine_staged="${tmp_dir}/tvos-arm64/libLiteRTLMEngineCPU.dylib"
+tvos_sim_engine_staged="${tmp_dir}/tvos-arm64-simulator/libLiteRTLMEngineCPU.dylib"
 device_constraint_staged="${tmp_dir}/ios-arm64/libGemmaModelConstraintProvider.dylib"
 sim_constraint_staged="${tmp_dir}/ios-arm64-simulator/libGemmaModelConstraintProvider.dylib"
 catalyst_constraint_staged="${tmp_dir}/ios-arm64-maccatalyst/libGemmaModelConstraintProvider.dylib"
 mac_constraint_staged="${tmp_dir}/macos-arm64/libGemmaModelConstraintProvider.dylib"
 vision_constraint_staged="${tmp_dir}/xros-arm64/libGemmaModelConstraintProvider.dylib"
 vision_sim_constraint_staged="${tmp_dir}/xros-arm64-simulator/libGemmaModelConstraintProvider.dylib"
+tvos_constraint_staged="${tmp_dir}/tvos-arm64/libGemmaModelConstraintProvider.dylib"
+tvos_sim_constraint_staged="${tmp_dir}/tvos-arm64-simulator/libGemmaModelConstraintProvider.dylib"
 headers_staged="${tmp_dir}/Headers"
 engine_placeholder_headers_staged="${tmp_dir}/EnginePlaceholderHeaders"
 constraint_placeholder_headers_staged="${tmp_dir}/ConstraintPlaceholderHeaders"
@@ -109,6 +113,8 @@ mkdir -p \
   "$(dirname "${mac_engine_staged}")" \
   "$(dirname "${vision_engine_staged}")" \
   "$(dirname "${vision_sim_engine_staged}")" \
+  "$(dirname "${tvos_engine_staged}")" \
+  "$(dirname "${tvos_sim_engine_staged}")" \
   "${headers_staged}" \
   "${engine_placeholder_headers_staged}" \
   "${constraint_placeholder_headers_staged}"
@@ -135,12 +141,18 @@ install -m 0755 "${mac_engine_input}" "${mac_engine_staged}"
 # device and simulator slices from the existing iOS outputs.
 retag_build_version visionos "${device_engine_input}" "${vision_engine_staged}" "1.0"
 retag_build_version visionossim "${sim_engine_input}" "${vision_sim_engine_staged}" "1.0"
+# Upstream does not publish dedicated tvOS dylibs either, so derive the
+# device and simulator slices from the packaged iOS outputs.
+retag_build_version tvos "${device_engine_input}" "${tvos_engine_staged}" "13.0"
+retag_build_version 8 "${sim_engine_input}" "${tvos_sim_engine_staged}" "13.0"
 install -m 0755 "${device_constraint_input}" "${device_constraint_staged}"
 install -m 0755 "${sim_constraint_input}" "${sim_constraint_staged}"
 retag_build_version maccatalyst "${sim_constraint_input}" "${catalyst_constraint_staged}"
 install -m 0755 "${mac_constraint_input}" "${mac_constraint_staged}"
 retag_build_version visionos "${device_constraint_input}" "${vision_constraint_staged}" "1.0"
 retag_build_version visionossim "${sim_constraint_input}" "${vision_sim_constraint_staged}" "1.0"
+retag_build_version tvos "${device_constraint_input}" "${tvos_constraint_staged}" "13.0"
+retag_build_version 8 "${sim_constraint_input}" "${tvos_sim_constraint_staged}" "13.0"
 
 rm -rf \
   "${artifacts_dir}/LiteRTLMEngineCPU.xcframework" \
@@ -153,6 +165,8 @@ xcodebuild -create-xcframework \
   -library "${mac_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
   -library "${vision_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
   -library "${vision_sim_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
+  -library "${tvos_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
+  -library "${tvos_sim_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
   -output "${artifacts_dir}/LiteRTLMEngineCPU.xcframework"
 
 xcodebuild -create-xcframework \
@@ -162,6 +176,8 @@ xcodebuild -create-xcframework \
   -library "${mac_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -library "${vision_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -library "${vision_sim_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
+  -library "${tvos_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
+  -library "${tvos_sim_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -output "${artifacts_dir}/GemmaModelConstraintProvider.xcframework"
 
 echo "Updated package artifacts:"
