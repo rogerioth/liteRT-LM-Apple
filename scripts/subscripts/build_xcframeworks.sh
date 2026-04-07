@@ -58,13 +58,15 @@ sim_engine_staged="${tmp_dir}/ios-arm64-simulator/libLiteRTLMEngineCPU.dylib"
 device_constraint_staged="${tmp_dir}/ios-arm64/libGemmaModelConstraintProvider.dylib"
 sim_constraint_staged="${tmp_dir}/ios-arm64-simulator/libGemmaModelConstraintProvider.dylib"
 headers_staged="${tmp_dir}/Headers"
-empty_headers_staged="${tmp_dir}/EmptyHeaders"
+engine_placeholder_headers_staged="${tmp_dir}/EnginePlaceholderHeaders"
+constraint_placeholder_headers_staged="${tmp_dir}/ConstraintPlaceholderHeaders"
 
 mkdir -p \
   "$(dirname "${device_engine_staged}")" \
   "$(dirname "${sim_engine_staged}")" \
   "${headers_staged}" \
-  "${empty_headers_staged}"
+  "${engine_placeholder_headers_staged}" \
+  "${constraint_placeholder_headers_staged}"
 
 for dylib in "${device_constraint_input}" "${sim_constraint_input}"; do
   if ! file "${dylib}" | grep -q "Mach-O"; then
@@ -76,7 +78,8 @@ done
 
 install -m 0644 "${upstream_dir}/c/engine.h" "${public_headers_dir}/engine.h"
 install -m 0644 "${upstream_dir}/c/engine.h" "${headers_staged}/engine.h"
-touch "${empty_headers_staged}/.gitkeep"
+printf '/* Placeholder header to preserve the XCFramework Headers directory in Git. */\n' > "${engine_placeholder_headers_staged}/LiteRTLMEngineCPUPlaceholder.h"
+printf '/* Placeholder header to preserve the XCFramework Headers directory in Git. */\n' > "${constraint_placeholder_headers_staged}/GemmaModelConstraintProviderPlaceholder.h"
 install -m 0755 "${device_engine_input}" "${device_engine_staged}"
 install -m 0755 "${sim_engine_input}" "${sim_engine_staged}"
 install -m 0755 "${device_constraint_input}" "${device_constraint_staged}"
@@ -87,13 +90,13 @@ rm -rf \
   "${artifacts_dir}/GemmaModelConstraintProvider.xcframework"
 
 xcodebuild -create-xcframework \
-  -library "${device_engine_staged}" -headers "${empty_headers_staged}" \
-  -library "${sim_engine_staged}" -headers "${empty_headers_staged}" \
+  -library "${device_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
+  -library "${sim_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
   -output "${artifacts_dir}/LiteRTLMEngineCPU.xcframework"
 
 xcodebuild -create-xcframework \
-  -library "${device_constraint_staged}" -headers "${empty_headers_staged}" \
-  -library "${sim_constraint_staged}" -headers "${empty_headers_staged}" \
+  -library "${device_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
+  -library "${sim_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -output "${artifacts_dir}/GemmaModelConstraintProvider.xcframework"
 
 echo "Updated package artifacts:"
