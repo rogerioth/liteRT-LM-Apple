@@ -22,7 +22,7 @@ In `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.2.0")
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.2.1")
 ]
 ```
 
