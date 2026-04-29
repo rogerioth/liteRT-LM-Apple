@@ -116,7 +116,10 @@ Then rerun:
 
 ## Multimodal
 
-- "Model says it cannot see images" or returns generic text when an image is attached: check that `litert_lm_engine_settings_set_max_num_images` was called with a value of at least `1` before `litert_lm_engine_create`.
+- **App crashes (`EXC_BAD_ACCESS`) inside `SessionBasic::ProcessAndCombineContents` the first time you send an image**: `vision_backend_str` was passed as `NULL` to `litert_lm_engine_settings_create`, so the engine never instantiated `vision_executor_`. Pass `"cpu"` (or `"gpu"`) instead.
+- **`DYNAMIC_UPDATE_SLICE` shape mismatch / `Failed to allocate tensors` during prefill of an image prompt**: usually one of two root causes:
+  1. `litert_lm_engine_settings_set_max_num_images` was not called, or was called with a value `< 1`. Vision-capable Gemma 4 models require at least `1`.
+  2. `litert_lm_engine_settings_set_max_num_tokens` and/or `litert_lm_engine_settings_set_prefill_chunk_size` were set explicitly to values that conflict with the model's baked vision-prefill graph. Leaving these at their model-driven defaults (i.e. not calling the setters) is the safer option for vision prompts. The sample app deliberately omits both setters for that reason.
+- "Model says it cannot see images" or returns generic text when an image is attached: same as the `max_num_images = 0` case above.
 - HEIC photos from the iOS Photos library: re-encode to JPEG (or PNG) before sending. The sample app does this via `ImageDataNormalizer`. The engine's stb_image-based decoder does not support HEIC.
-- `DYNAMIC_UPDATE_SLICE` shape mismatch on iOS device prefill: same root cause as above — `max_num_images` left at the default `0`.
-- Crash during E4B vision prefill on Apple Silicon: track upstream issue [#1933](https://github.com/google-ai-edge/LiteRT-LM/issues/1933). As a workaround, use Gemma 4 E2B for image testing.
+- Crash during Gemma 4 E4B vision prefill on Apple Silicon: track upstream issue [#1933](https://github.com/google-ai-edge/LiteRT-LM/issues/1933). As a workaround, use Gemma 4 E2B for image testing.

@@ -167,7 +167,12 @@ The Conversation API on the C surface accepts user messages with mixed image and
 ]}
 ```
 
-Call `litert_lm_engine_settings_set_max_num_images(settings, 1)` before creating the engine on a vision-capable model — leaving it at the default `0` causes the prefill graph to fail with a `DYNAMIC_UPDATE_SLICE` shape mismatch on physical iOS devices.
+Two settings must be in place before creating the engine on a vision-capable model:
+
+1. Pass `"cpu"` (or `"gpu"`) for `vision_backend_str` in `litert_lm_engine_settings_create` — passing `NULL` skips vision-executor instantiation and the first image content part will crash.
+2. Call `litert_lm_engine_settings_set_max_num_images(settings, 1)` (or higher). The default of `0` causes the prefill graph to fail with a `DYNAMIC_UPDATE_SLICE` shape mismatch.
+
+Leave `max_num_tokens` and `prefill_chunk_size` at their model-driven defaults for vision prompts; explicit overrides can conflict with the baked vision-prefill graph.
 
 ## Screenshots
 
