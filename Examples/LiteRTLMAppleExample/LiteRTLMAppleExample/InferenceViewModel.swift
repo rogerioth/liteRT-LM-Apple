@@ -11,6 +11,7 @@ final class InferenceViewModel: ObservableObject {
     @Published private(set) var errorMessage = ""
     @Published private(set) var isDownloading = false
     @Published private(set) var isRunning = false
+    @Published private(set) var attachedImageData: Data?
 
     private let modelStore: ModelStore
     private let runtime: LiteRTLMRuntimeProtocol
@@ -98,7 +99,24 @@ final class InferenceViewModel: ObservableObject {
         benchmark = nil
         errorMessage = ""
         downloadProgress = nil
+        attachedImageData = nil
         refreshLocalModelState()
+    }
+
+    func attachImage(_ data: Data) {
+        attachedImageData = data
+        errorMessage = ""
+        ConsoleLog.info("Attached image (\(data.count) bytes).", category: "ViewModel")
+    }
+
+    func clearAttachedImage() {
+        guard attachedImageData != nil else { return }
+        attachedImageData = nil
+        ConsoleLog.info("Cleared attached image.", category: "ViewModel")
+    }
+
+    func setExamplePromptForAttachedImage() {
+        prompt = "What is this?"
     }
 
     func downloadSelectedModel() {
@@ -157,6 +175,7 @@ final class InferenceViewModel: ObservableObject {
             benchmark = nil
             errorMessage = ""
             downloadProgress = nil
+            attachedImageData = nil
             ConsoleLog.info("Deleted local model copy for \(selectedModel.displayName).", category: "ViewModel")
         } catch {
             errorMessage = Self.describe(error)
@@ -183,12 +202,14 @@ final class InferenceViewModel: ObservableObject {
             return
         }
 
+        let inputs = InferenceInputs(prompt: trimmedPrompt, imageData: attachedImageData)
+
         errorMessage = ""
         response = ""
         benchmark = nil
         isRunning = true
         ConsoleLog.info(
-            "Running inference with model=\(selectedModel.displayName) prompt_chars=\(trimmedPrompt.count) prompt_preview=\(ConsoleLog.preview(trimmedPrompt)).",
+            "Running inference with model=\(selectedModel.displayName) prompt_chars=\(trimmedPrompt.count) image_bytes=\(inputs.imageData?.count ?? 0) prompt_preview=\(ConsoleLog.preview(trimmedPrompt)).",
             category: "ViewModel"
         )
 
@@ -197,7 +218,7 @@ final class InferenceViewModel: ObservableObject {
                 let result = try await runtime.generateResponse(
                     modelURL: localModelURL,
                     cacheDirectory: modelStore.cacheDirectory,
-                    prompt: trimmedPrompt
+                    inputs: inputs
                 )
 
                 response = result.text
