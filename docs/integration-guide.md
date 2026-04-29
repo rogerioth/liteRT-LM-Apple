@@ -88,13 +88,20 @@ To attach an image to a user message, embed a base64-encoded JPEG (or any stb_im
 ]}
 ```
 
-Before creating the engine, raise the per-prompt image budget so the prefill graph reserves enough KV cache:
+Before creating the engine, declare a vision backend so the engine actually instantiates a vision executor, and raise the per-prompt image budget so the prefill graph reserves enough KV cache:
 
 ```c
+LiteRtLmEngineSettings* settings = litert_lm_engine_settings_create(
+    model_path,
+    /*backend_str=*/"cpu",
+    /*vision_backend_str=*/"cpu",
+    /*audio_backend_str=*/NULL);
 litert_lm_engine_settings_set_max_num_images(settings, 1);
 ```
 
-The engine handles decode, bicubic resize to the model's baked dimension (`768x768` for Gemma 4 E2B / E4B), and `[0, 1]` normalization, so callers do not need to preprocess the bitmap.
+If `vision_backend_str` is left `NULL`, the first image content part will crash inside the runtime (`vision_executor_` is null). If `max_num_images` is left at the default `0`, vision prefill fails with a `DYNAMIC_UPDATE_SLICE` shape mismatch.
+
+Avoid setting `max_num_tokens` or `prefill_chunk_size` for vision prompts unless you have a specific reason; those overrides can conflict with the model's baked vision-prefill graph. The engine handles decode, bicubic resize to the model's baked dimension (`768x768` for Gemma 4 E2B / E4B), and `[0, 1]` normalization, so callers do not need to preprocess the bitmap.
 
 ## When To Use The Sample App First
 
