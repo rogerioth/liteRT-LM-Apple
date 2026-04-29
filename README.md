@@ -154,6 +154,21 @@ If you want to point the sample at different models, update:
 
 `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/ModelCatalog.swift`
 
+## Multimodal
+
+The sample app can attach a photo and ask Gemma 4 about it. Click `Attach Image` in the Prompt card, choose a photo from your Photos library, click the `"What is this?"` chip (or type your own prompt), and run inference. Picker output is re-encoded as JPEG before reaching the engine, so HEIC photos from iOS work uniformly on every platform.
+
+The Conversation API on the C surface accepts user messages with mixed image and text content parts:
+
+```json
+{"role":"user","content":[
+  {"type":"image","blob":"<base64-jpeg>"},
+  {"type":"text","text":"What is this?"}
+]}
+```
+
+Call `litert_lm_engine_settings_set_max_num_images(settings, 1)` before creating the engine on a vision-capable model — leaving it at the default `0` causes the prefill graph to fail with a `DYNAMIC_UPDATE_SLICE` shape mismatch on physical iOS devices.
+
 ## Screenshots
 
 <p align="center">
@@ -249,7 +264,7 @@ Current published release:
 ## Upstream Pin
 
 - upstream repository: `https://github.com/google-ai-edge/LiteRT-LM.git`
-- pinned revision: `e4d5da404e54eeea7903ae23d81fe8447cb3e089`
+- pinned revision: `7d1923daaaa1e5143f77f0adb105188e53e8485e`
 - configuration source: `scripts/subscripts/common.sh`
 
 ## Compatibility Notes
