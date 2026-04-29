@@ -19,11 +19,16 @@ struct InferenceResult: Sendable {
     let benchmark: InferenceBenchmark?
 }
 
+struct InferenceInputs: Sendable {
+    let prompt: String
+    let imageData: Data?
+}
+
 protocol LiteRTLMRuntimeProtocol: Sendable {
     func generateResponse(
         modelURL: URL,
         cacheDirectory: URL,
-        prompt: String
+        inputs: InferenceInputs
     ) async throws -> InferenceResult
 }
 
@@ -31,17 +36,17 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
     func generateResponse(
         modelURL: URL,
         cacheDirectory: URL,
-        prompt: String
+        inputs: InferenceInputs
     ) async throws -> InferenceResult {
         ConsoleLog.info(
-            "Queueing inference task. model=\(modelURL.path) cache=\(cacheDirectory.path) prompt_chars=\(prompt.count).",
+            "Queueing inference task. model=\(modelURL.path) cache=\(cacheDirectory.path) prompt_chars=\(inputs.prompt.count) image_bytes=\(inputs.imageData?.count ?? 0).",
             category: "Runtime"
         )
         return try await Task.detached(priority: .userInitiated) {
             try generateResponseSynchronously(
                 modelURL: modelURL,
                 cacheDirectory: cacheDirectory,
-                prompt: prompt
+                inputs: inputs
             )
         }.value
     }
@@ -49,14 +54,15 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
     private func generateResponseSynchronously(
         modelURL: URL,
         cacheDirectory: URL,
-        prompt: String
+        inputs: InferenceInputs
     ) throws -> InferenceResult {
         ConsoleLog.info(
-            "Starting synchronous inference. model=\(modelURL.path) cache=\(cacheDirectory.path).",
+            "Starting synchronous inference. model=\(modelURL.path) cache=\(cacheDirectory.path) image_attached=\(inputs.imageData != nil).",
             category: "Runtime"
         )
-        ConsoleLog.debug("Prompt preview=\(ConsoleLog.preview(prompt)).", category: "Runtime")
-        litert_lm_set_min_log_level(1)
+        ConsoleLog.debug("Prompt preview=\(ConsoleLog.preview(inputs.prompt)).", category: "Runtime")
+        // 0=VERBOSE, 1=DEBUG, 2=INFO, 3=WARNING, 4=ERROR, 5=FATAL, 1000=SILENT.
+        litert_lm_set_min_log_level(3)
 
         try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
         ConsoleLog.debug("Ensured runtime cache directory exists.", category: "Runtime")
@@ -74,9 +80,13 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         ConsoleLog.info("Created engine settings for CPU backend.", category: "Runtime")
 
         litert_lm_engine_settings_set_max_num_tokens(settings, 1024)
+        litert_lm_engine_settings_set_max_num_images(settings, 1)
         litert_lm_engine_settings_set_prefill_chunk_size(settings, 256)
         litert_lm_engine_settings_enable_benchmark(settings)
-        ConsoleLog.debug("Applied engine settings: max_num_tokens=1024 prefill_chunk_size=256 benchmark=enabled.", category: "Runtime")
+        ConsoleLog.debug(
+            "Applied engine settings: max_num_tokens=1024 max_num_images=1 prefill_chunk_size=256 benchmark=enabled.",
+            category: "Runtime"
+        )
 
         cacheDirectory.path.withCString { cachePointer in
             litert_lm_engine_settings_set_cache_dir(settings, cachePointer)
@@ -98,25 +108,19 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         litert_lm_session_config_set_max_output_tokens(sessionConfig, 256)
         ConsoleLog.debug("Configured session max_output_tokens=256.", category: "Runtime")
 
-        let systemMessageJSON =
-            #"{"type":"text","text":"You are a concise assistant running entirely on-device. Answer clearly and directly."}"#
-
-        let conversationConfig = systemMessageJSON.withCString { systemMessagePointer in
-            litert_lm_conversation_config_create(
-                engine,
-                sessionConfig,
-                systemMessagePointer,
-                nil,
-                nil,
-                false
-            )
-        }
-
-        guard let conversationConfig else {
+        guard let conversationConfig = litert_lm_conversation_config_create() else {
             throw LiteRTLMRuntimeError("Failed to create LiteRT-LM conversation config.")
         }
         defer { litert_lm_conversation_config_delete(conversationConfig) }
-        ConsoleLog.info("Created conversation config.", category: "Runtime")
+
+        litert_lm_conversation_config_set_session_config(conversationConfig, sessionConfig)
+
+        let systemMessageJSON =
+            #"{"type":"text","text":"You are a concise assistant running entirely on-device. Answer clearly and directly."}"#
+        systemMessageJSON.withCString { pointer in
+            litert_lm_conversation_config_set_system_message(conversationConfig, pointer)
+        }
+        ConsoleLog.info("Configured conversation config (session + system message).", category: "Runtime")
 
         guard let conversation = litert_lm_conversation_create(engine, conversationConfig) else {
             throw LiteRTLMRuntimeError("Failed to create LiteRT-LM conversation.")
@@ -124,9 +128,9 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         defer { litert_lm_conversation_delete(conversation) }
         ConsoleLog.info("Created LiteRT-LM conversation.", category: "Runtime")
 
-        let messageJSON = try Self.makeUserMessageJSON(prompt: prompt)
+        let messageJSON = try Self.makeUserMessageJSON(inputs: inputs)
         let extraContextJSON = #"{"enable_thinking":false}"#
-        ConsoleLog.debug("Message JSON=\(ConsoleLog.preview(messageJSON)).", category: "Runtime")
+        ConsoleLog.debug("Message JSON=\(ConsoleLog.preview(messageJSON, limit: 200)).", category: "Runtime")
         ConsoleLog.debug("Extra context JSON=\(extraContextJSON).", category: "Runtime")
 
         let generatedText = try messageJSON.withCString { messagePointer -> String in
@@ -178,18 +182,28 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         return InferenceResult(text: generatedText, benchmark: benchmark)
     }
 
-    private static func makeUserMessageJSON(prompt: String) throws -> String {
+    static func makeUserMessageJSON(inputs: InferenceInputs) throws -> String {
+        var contentParts: [[String: Any]] = []
+        if let imageData = inputs.imageData {
+            contentParts.append([
+                "type": "image",
+                "blob": imageData.base64EncodedString(),
+            ])
+        }
+        contentParts.append([
+            "type": "text",
+            "text": inputs.prompt,
+        ])
+
         let message: [String: Any] = [
             "role": "user",
-            "content": [
-                [
-                    "type": "text",
-                    "text": prompt,
-                ],
-            ],
+            "content": contentParts,
         ]
 
-        let data = try JSONSerialization.data(withJSONObject: message)
+        let data = try JSONSerialization.data(
+            withJSONObject: message,
+            options: [.sortedKeys]
+        )
 
         guard let string = String(data: data, encoding: .utf8) else {
             throw LiteRTLMRuntimeError("Failed to encode the message JSON as UTF-8.")
