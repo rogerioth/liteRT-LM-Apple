@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 UPSTREAM_URL_DEFAULT="https://github.com/google-ai-edge/LiteRT-LM.git"
-UPSTREAM_BASE_REVISION_DEFAULT="e4d5da404e54eeea7903ae23d81fe8447cb3e089"
+UPSTREAM_BASE_REVISION_DEFAULT="7d1923daaaa1e5143f77f0adb105188e53e8485e"
 UPSTREAM_CLONE_DIR_DEFAULT="${REPO_ROOT}/.worktree/LiteRT-LM"
 PATCH_FILE_DEFAULT="${REPO_ROOT}/patches/0001-export-ios-shared-engine-dylib.patch"
 ARTIFACTS_DIR_DEFAULT="${REPO_ROOT}/Artifacts"
