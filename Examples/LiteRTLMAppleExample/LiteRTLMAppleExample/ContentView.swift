@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 #if os(macOS)
 import AppKit
 #elseif canImport(UIKit)
@@ -7,6 +8,7 @@ import UIKit
 
 struct ContentView: View {
     @ObservedObject var viewModel: InferenceViewModel
+    @State private var pickerSelection: PhotosPickerItem?
 
     var body: some View {
         NavigationStack {
@@ -186,6 +188,45 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(icon: "text.bubble", title: "Prompt")
 
+                if let imageData = viewModel.attachedImageData,
+                   let preview = Self.previewImage(from: imageData) {
+                    HStack(spacing: 10) {
+                        preview
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.primary.opacity(0.08))
+                            )
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Image attached")
+                                .font(.footnote.weight(.semibold))
+                            Text(imageData.count.formatted(.byteCount(style: .file)))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Button {
+                            viewModel.clearAttachedImage()
+                            pickerSelection = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title3)
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Remove attached image")
+                    }
+                    .padding(8)
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+
                 ZStack(alignment: .topLeading) {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.appSecondaryBackground)
@@ -199,6 +240,44 @@ struct ContentView: View {
                         .scrollContentBackground(.hidden)
                         .padding(8)
                         .frame(minHeight: 120)
+                }
+
+                HStack(spacing: 8) {
+                    PhotosPicker(
+                        selection: $pickerSelection,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "paperclip")
+                            Text(viewModel.attachedImageData == nil ? "Attach Image" : "Replace Image")
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 22)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .disabled(viewModel.isDownloading || viewModel.isRunning)
+
+                    if viewModel.attachedImageData != nil {
+                        Button {
+                            viewModel.setExamplePromptForAttachedImage()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "questionmark.bubble")
+                                Text("\"What is this?\"")
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
+                            .font(.footnote.weight(.semibold))
+                            .frame(maxWidth: .infinity, minHeight: 22)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                        .disabled(viewModel.isDownloading || viewModel.isRunning)
+                    }
                 }
 
                 Button {
@@ -218,6 +297,36 @@ struct ContentView: View {
                 .disabled(viewModel.localModelURL == nil || viewModel.isDownloading || viewModel.isRunning)
             }
         }
+        .onChange(of: pickerSelection) { _, newValue in
+            guard let newValue else { return }
+            Task { await loadAttachedImage(from: newValue) }
+        }
+    }
+
+    private func loadAttachedImage(from item: PhotosPickerItem) async {
+        do {
+            guard let rawData = try await item.loadTransferable(type: Data.self) else {
+                await MainActor.run { viewModel.clearAttachedImage() }
+                return
+            }
+            let normalized = try ImageDataNormalizer.makeJPEGData(from: rawData)
+            await MainActor.run { viewModel.attachImage(normalized) }
+        } catch {
+            await MainActor.run {
+                viewModel.clearAttachedImage()
+                ConsoleLog.error("Failed to load attached image: \(error)", category: "ViewModel")
+            }
+        }
+    }
+
+    private static func previewImage(from data: Data) -> Image? {
+#if os(macOS)
+        guard let nsImage = NSImage(data: data) else { return nil }
+        return Image(nsImage: nsImage)
+#else
+        guard let uiImage = UIImage(data: data) else { return nil }
+        return Image(uiImage: uiImage)
+#endif
     }
 
     // MARK: - Response
