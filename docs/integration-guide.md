@@ -77,6 +77,25 @@ At a high level, LiteRT-LM usage looks like this:
 
 The main README includes a small Swift example for that flow.
 
+## Sending An Image
+
+To attach an image to a user message, embed a base64-encoded JPEG (or any stb_image-decodable format) as the first content part:
+
+```json
+{"role":"user","content":[
+  {"type":"image","blob":"<base64>"},
+  {"type":"text","text":"What is this?"}
+]}
+```
+
+Before creating the engine, raise the per-prompt image budget so the prefill graph reserves enough KV cache:
+
+```c
+litert_lm_engine_settings_set_max_num_images(settings, 1);
+```
+
+The engine handles decode, bicubic resize to the model's baked dimension (`768x768` for Gemma 4 E2B / E4B), and `[0, 1]` normalization, so callers do not need to preprocess the bitmap.
+
 ## When To Use The Sample App First
 
 If your real goal is "prove Gemma 4 can run on this device," start with the sample app before building your own runtime layer.
