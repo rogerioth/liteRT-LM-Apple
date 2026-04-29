@@ -29,7 +29,7 @@ In scope:
   - `xmark.circle` control to remove the attached image.
   - Cross-platform `PhotosPicker` (SwiftUI), with `PHPickerFilter.images`.
   - Optional one-tap "What is this?" prompt chip when an image is attached.
-- `InferenceViewModel` extended with `selectedImageData: Data?` and the lifecycle wiring (clear on model switch, clear after a successful run).
+- `InferenceViewModel` extended with `attachedImageData: Data?` and the lifecycle wiring (clear on model switch, clear after a successful run).
 - A small Swift assertion (or unit test if a test target already exists) covering the message-JSON builder so we don't silently regress the wire format.
 - Documentation updates to reflect: new pinned revision, new C-API surface, image attach flow, supported platforms.
 
@@ -85,10 +85,10 @@ Inside `generateResponseSynchronously`:
   - Image bytes are base64-encoded as-is. Caller is expected to pass PNG or JPEG bytes (any stb-decodable format works); the engine handles decode, bicubic resize to the model's baked dim (768×768 for Gemma 4 E2B/E4B), and `[0, 1]` normalization.
 
 ### View-model side (`InferenceViewModel.swift`)
-- Adds `@Published private(set) var selectedImageData: Data?`.
+- Adds `@Published private(set) var attachedImageData: Data?`.
 - Adds `attachImage(_:)` and `clearAttachedImage()` API surface.
-- `selectModel(_:)` and `runInference()` reset `selectedImageData` after a successful inference (so the user has to re-attach for the next run; this matches the gallery's per-turn attach UX).
-- `runInference()` builds an `InferenceInputs` from `prompt` + `selectedImageData` and forwards it.
+- `selectModel(_:)` and `deleteSelectedModel()` reset `attachedImageData`. `runInference()` does not auto-clear, so the user can iterate prompts on the same image.
+- `runInference()` builds an `InferenceInputs` from `prompt` + `attachedImageData` and forwards it.
 
 ### View side (`ContentView.swift`)
 - Prompt card gains a small thumbnail row above the `TextEditor`:
