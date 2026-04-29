@@ -1,8 +1,8 @@
 diff --git a/c/BUILD b/c/BUILD
-index 078607ae..9ac4b5c4 100644
+index 4e157c2f..5ec6a371 100644
 --- a/c/BUILD
 +++ b/c/BUILD
-@@ -83,6 +83,24 @@ cc_library(
+@@ -85,6 +85,24 @@ cc_library(
      ],
  )
  
@@ -28,13 +28,14 @@ index 078607ae..9ac4b5c4 100644
      name = "engine_test",
      srcs = ["engine_test.cc"],
 diff --git a/c/engine.cc b/c/engine.cc
-index 60ebd3f5..94c8c19c 100644
+index 28b8518c..3cf22c78 100644
 --- a/c/engine.cc
 +++ b/c/engine.cc
-@@ -355,6 +355,14 @@ void litert_lm_engine_settings_set_max_num_tokens(
+@@ -396,6 +396,15 @@ void litert_lm_engine_settings_set_max_num_tokens(
+         max_num_tokens);
    }
  }
- 
++
 +void litert_lm_engine_settings_set_max_num_images(
 +    LiteRtLmEngineSettings* settings, int max_num_images) {
 +  if (settings && settings->settings) {
@@ -43,14 +44,14 @@ index 60ebd3f5..94c8c19c 100644
 +  }
 +}
 +
- void litert_lm_engine_settings_set_cache_dir(LiteRtLmEngineSettings* settings,
-                                              const char* cache_dir) {
+ void litert_lm_engine_settings_set_parallel_file_section_loading(
+     LiteRtLmEngineSettings* settings, bool parallel_file_section_loading) {
    if (settings && settings->settings) {
 diff --git a/c/engine.h b/c/engine.h
-index 6bfbe7b2..e25c294c 100644
+index aa1eec8b..a08e62ad 100644
 --- a/c/engine.h
 +++ b/c/engine.h
-@@ -182,6 +182,18 @@ LITERT_LM_C_API_EXPORT
+@@ -262,6 +262,18 @@ LITERT_LM_C_API_EXPORT
  void litert_lm_engine_settings_set_max_num_tokens(
      LiteRtLmEngineSettings* settings, int max_num_tokens);
  
@@ -66,6 +67,6 @@ index 6bfbe7b2..e25c294c 100644
 +void litert_lm_engine_settings_set_max_num_images(
 +    LiteRtLmEngineSettings* settings, int max_num_images);
 +
- // Sets the cache directory for the engine.
+ // Sets whether the engine should load different sections of the litertlm file
+ // in parallel. Defaults to true.
  //
- // @param settings The engine settings.
