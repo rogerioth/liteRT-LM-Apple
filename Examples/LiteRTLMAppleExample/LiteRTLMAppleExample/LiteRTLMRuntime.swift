@@ -69,7 +69,14 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
 
         let settings = modelURL.path.withCString { modelPathPointer in
             "cpu".withCString { backendPointer in
-                litert_lm_engine_settings_create(modelPathPointer, backendPointer, nil, nil)
+                "cpu".withCString { visionBackendPointer in
+                    litert_lm_engine_settings_create(
+                        modelPathPointer,
+                        backendPointer,
+                        visionBackendPointer,
+                        nil
+                    )
+                }
             }
         }
 
@@ -79,12 +86,10 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         defer { litert_lm_engine_settings_delete(settings) }
         ConsoleLog.info("Created engine settings for CPU backend.", category: "Runtime")
 
-        litert_lm_engine_settings_set_max_num_tokens(settings, 1024)
         litert_lm_engine_settings_set_max_num_images(settings, 1)
-        litert_lm_engine_settings_set_prefill_chunk_size(settings, 256)
         litert_lm_engine_settings_enable_benchmark(settings)
         ConsoleLog.debug(
-            "Applied engine settings: max_num_tokens=1024 max_num_images=1 prefill_chunk_size=256 benchmark=enabled.",
+            "Applied engine settings: max_num_images=1 benchmark=enabled (max_num_tokens / prefill_chunk_size left to model heuristics).",
             category: "Runtime"
         )
 
