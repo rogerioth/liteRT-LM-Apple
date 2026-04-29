@@ -113,3 +113,10 @@ Then rerun:
 ```bash
 ./scripts/buildall.sh
 ```
+
+## Multimodal
+
+- "Model says it cannot see images" or returns generic text when an image is attached: check that `litert_lm_engine_settings_set_max_num_images` was called with a value of at least `1` before `litert_lm_engine_create`.
+- HEIC photos from the iOS Photos library: re-encode to JPEG (or PNG) before sending. The sample app does this via `ImageDataNormalizer`. The engine's stb_image-based decoder does not support HEIC.
+- `DYNAMIC_UPDATE_SLICE` shape mismatch on iOS device prefill: same root cause as above — `max_num_images` left at the default `0`.
+- Crash during E4B vision prefill on Apple Silicon: track upstream issue [#1933](https://github.com/google-ai-edge/LiteRT-LM/issues/1933). As a workaround, use Gemma 4 E2B for image testing.

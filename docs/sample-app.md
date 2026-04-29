@@ -8,6 +8,7 @@ The sample app under `Examples/LiteRTLMAppleExample/` is the fastest way to see 
 - downloading the model into local app storage
 - storing runtime cache data separately
 - running single-turn inference from SwiftUI
+- attaching a photo and running multimodal inference against Gemma 4
 - printing structured runtime and download logs into the Xcode console
 - resolving the package remotely through GitHub Swift Package Manager
 
