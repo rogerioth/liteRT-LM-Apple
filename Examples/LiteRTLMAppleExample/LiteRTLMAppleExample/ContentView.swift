@@ -1,5 +1,5 @@
 import SwiftUI
-import PhotosUI
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #elseif canImport(UIKit)
@@ -8,7 +8,7 @@ import UIKit
 
 struct ContentView: View {
     @ObservedObject var viewModel: InferenceViewModel
-    @State private var pickerSelection: PhotosPickerItem?
+    @State private var isImporting = false
 
     var body: some View {
         NavigationStack {
@@ -213,7 +213,6 @@ struct ContentView: View {
 
                         Button {
                             viewModel.clearAttachedImage()
-                            pickerSelection = nil
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.title3)
@@ -243,11 +242,9 @@ struct ContentView: View {
                 }
 
                 HStack(spacing: 8) {
-                    PhotosPicker(
-                        selection: $pickerSelection,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
+                    Button {
+                        isImporting = true
+                    } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "paperclip")
                             Text(viewModel.attachedImageData == nil ? "Attach Image" : "Replace Image")
@@ -297,18 +294,31 @@ struct ContentView: View {
                 .disabled(viewModel.localModelURL == nil || viewModel.isDownloading || viewModel.isRunning)
             }
         }
-        .onChange(of: pickerSelection) { _, newValue in
-            guard let newValue else { return }
-            Task { await loadAttachedImage(from: newValue) }
+        .fileImporter(
+            isPresented: $isImporting,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                Task { await loadAttachedImage(from: url) }
+            case .failure(let error):
+                ConsoleLog.error("File importer failed: \(error)", category: "ViewModel")
+            }
         }
     }
 
-    private func loadAttachedImage(from item: PhotosPickerItem) async {
-        do {
-            guard let rawData = try await item.loadTransferable(type: Data.self) else {
-                await MainActor.run { viewModel.clearAttachedImage() }
-                return
+    private func loadAttachedImage(from url: URL) async {
+        let didStartAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccess {
+                url.stopAccessingSecurityScopedResource()
             }
+        }
+
+        do {
+            let rawData = try Data(contentsOf: url)
             let normalized = try ImageDataNormalizer.makeJPEGData(from: rawData)
             await MainActor.run { viewModel.attachImage(normalized) }
         } catch {
