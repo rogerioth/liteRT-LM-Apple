@@ -182,6 +182,18 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_max_num_tokens(
     LiteRtLmEngineSettings* settings, int max_num_tokens);
 
+// Sets the maximum number of image inputs the engine should reserve KV cache
+// space for. Required to be at least 1 when sending images through the
+// conversation API on a vision-capable model (e.g. Gemma 4 E2B / E4B);
+// leaving it at 0 (the default) causes the prefill graph to fail with a
+// DYNAMIC_UPDATE_SLICE shape mismatch on physical iOS devices.
+//
+// @param settings The engine settings.
+// @param max_num_images The maximum number of images per prompt.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_max_num_images(
+    LiteRtLmEngineSettings* settings, int max_num_images);
+
 // Sets the cache directory for the engine.
 //
 // @param settings The engine settings.
