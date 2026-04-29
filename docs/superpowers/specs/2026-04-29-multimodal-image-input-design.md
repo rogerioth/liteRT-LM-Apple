@@ -98,7 +98,7 @@ Inside `generateResponseSynchronously`:
 - Above the Run button, a row of two compact buttons:
   - `paperclip` "Attach Image" — opens a `PhotosPicker(filter: .images)`.
   - "What is this?" chip — convenience that sets the prompt text and is hidden if no image is attached.
-- `PhotosPicker` selection is loaded as `Data` via `PhotosPickerItem.loadTransferable(type: Data.self)`, then **always re-encoded to PNG via ImageIO** before storing in the view model. iOS Photos commonly returns HEIC, and the engine's stb_image decoder does not support HEIC — re-encoding to PNG is the simplest cross-platform guarantee that whatever bytes the engine receives are stb-decodable. The encode pipeline uses `CGImageSourceCreateWithData` → `CGImageDestinationCreateWithData(..., "public.png", ...)`, which avoids UIKit/AppKit branching and works on iOS, iPadOS, Mac Catalyst, native macOS, and visionOS uniformly.
+- `PhotosPicker` selection is loaded as `Data` via `PhotosPickerItem.loadTransferable(type: Data.self)`, then **always re-encoded to JPEG via ImageIO** before storing in the view model. iOS Photos commonly returns HEIC, and the engine's stb_image decoder does not support HEIC — re-encoding to JPEG is the simplest cross-platform guarantee that whatever bytes the engine receives are stb-decodable, and JPEG keeps payload size small. The encode pipeline uses `CGImageSourceCreateWithData` → `CGImageDestinationCreateWithData(..., "public.jpeg", ...)` with `kCGImageDestinationLossyCompressionQuality` of `0.9`, which avoids UIKit/AppKit branching and works on iOS, iPadOS, Mac Catalyst, native macOS, and visionOS uniformly.
 - Layout follows the existing `Card` styling — no new visual primitives.
 
 ### Cross-platform notes
