@@ -30,7 +30,7 @@ If you are evaluating this feature branch before the next tagged release, you ca
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", branch: "feat/visionos-support")
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", branch: "feat/multimodal-image-input")
 ]
 ```
 
