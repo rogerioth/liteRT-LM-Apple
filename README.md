@@ -52,7 +52,7 @@ This repository is probably not what you want if you are looking for:
 If you want to integrate this package into another app, use the GitHub repository URL and a tagged release.
 
 - repository URL: `https://github.com/rogerioth/liteRT-LM-Apple.git`
-- current release: `v0.2.3`
+- current release: `v0.2.5`
 
 This branch's sample app intentionally resolves the package from `main` over GitHub SPM so the example tracks the latest unreleased package state (visionOS support, multimodal image input) until the next tag is cut.
 
@@ -62,14 +62,14 @@ In Xcode:
 2. Choose `File` -> `Add Package Dependencies...`.
 3. Enter `https://github.com/rogerioth/liteRT-LM-Apple.git`.
 4. Select `Up to Next Minor Version`.
-5. Set the version to `0.2.3`.
+5. Set the version to `0.2.5`.
 6. Link the `LiteRTLMApple` product to your app target.
 
 In `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.2.3")
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.2.5")
 ]
 ```
 
@@ -99,21 +99,19 @@ Here is a minimal single-turn flow from Swift:
 import Foundation
 import LiteRTLMApple
 
-let settings = litert_lm_engine_settings_create(modelPath, "cpu", nil, nil)
+// Pass "cpu" for vision_backend_str if you plan to send images.
+let settings = litert_lm_engine_settings_create(modelPath, "cpu", "cpu", nil)
 litert_lm_engine_settings_set_cache_dir(settings, cacheDirectory)
+litert_lm_engine_settings_set_max_num_images(settings, 1)
 
 let engine = litert_lm_engine_create(settings)
+
 let sessionConfig = litert_lm_session_config_create()
 litert_lm_session_config_set_max_output_tokens(sessionConfig, 256)
 
-let conversationConfig = litert_lm_conversation_config_create(
-    engine,
-    sessionConfig,
-    systemMessageJSON,
-    nil,
-    nil,
-    false
-)
+let conversationConfig = litert_lm_conversation_config_create()
+litert_lm_conversation_config_set_session_config(conversationConfig, sessionConfig)
+litert_lm_conversation_config_set_system_message(conversationConfig, systemMessageJSON)
 
 let conversation = litert_lm_conversation_create(engine, conversationConfig)
 let response = litert_lm_conversation_send_message(
@@ -264,7 +262,7 @@ Swift Package Manager resolves this package from Git tags. If you are integratin
 
 Current published release:
 
-- `v0.2.3`
+- `v0.2.5`
 
 ## Upstream Pin
 
