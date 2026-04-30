@@ -59,18 +59,6 @@ jobs:
     environment:
       HOMEBREW_NO_AUTO_UPDATE: "1"
       HOMEBREW_NO_INSTALL_CLEANUP: "1"
-      # CircleCI's macOS images preconfigure a global git credential helper
-      # that injects placeholder GitHub creds. For public repos with LFS that
-      # makes the LFS server return "Bad credentials" instead of letting the
-      # request be anonymous. Override the per-host helpers to empty for the
-      # whole job without rewriting any config files.
-      GIT_CONFIG_COUNT: "3"
-      GIT_CONFIG_KEY_0: "credential.helper"
-      GIT_CONFIG_VALUE_0: ""
-      GIT_CONFIG_KEY_1: "credential.https://github.com.helper"
-      GIT_CONFIG_VALUE_1: ""
-      GIT_CONFIG_KEY_2: "credential.https://api.github.com.helper"
-      GIT_CONFIG_VALUE_2: ""
       # Never block on a TTY prompt -- if anything ever asks for input, fail
       # fast instead of hanging the job.
       GIT_TERMINAL_PROMPT: "0"
@@ -91,6 +79,35 @@ jobs:
             brew install bazelisk git-lfs
             git lfs install
             bazelisk version || true
+
+      - run:
+          name: Neutralize credential helpers for LFS public-repo fetch
+          command: |
+            # CircleCI's macOS image ships with /etc/gitconfig configured to
+            # use osxkeychain as a credential helper, and a stale credential
+            # entry for github.com that authenticates as the user's PAT.
+            # When git-lfs fetches public-repo objects from a *different*
+            # GitHub repo (google-ai-edge/LiteRT-LM), GitHub rejects those
+            # creds with "Bad credentials" instead of letting the fetch be
+            # anonymous.
+            #
+            # Append a no-op credential helper override to the user-level
+            # gitconfig. This is write-only -- no git commands are invoked --
+            # so it cannot hang on a keychain prompt the way `git config
+            # --global --list` did in pipeline 10.
+            #
+            # The leading empty `helper =` clears any previously-set helper
+            # for the credential section, then we deliberately do not set one.
+            cat >> "$HOME/.gitconfig" <<'EOF'
+            [credential]
+                helper =
+            [credential "https://github.com"]
+                helper =
+            [credential "https://api.github.com"]
+                helper =
+            EOF
+            echo "Updated ~/.gitconfig:"
+            cat "$HOME/.gitconfig"
 
       - restore_cache:
           keys:
