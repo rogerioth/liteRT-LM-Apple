@@ -1,5 +1,7 @@
 # LiteRT-LM-Apple
 
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/rogerioth/liteRT-LM-Apple/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/rogerioth/liteRT-LM-Apple/tree/main)
+
 If you want to run LiteRT-LM models inside an iPhone, iPad, Apple Vision Pro, Mac, or Mac Catalyst app, but you do not want to spend your time packaging upstream Apple binaries by hand, this repository is for you.
 
 `LiteRT-LM-Apple` gives you a Swift Package Manager-friendly way to integrate the upstream LiteRT-LM Apple C API into Xcode. You get prebuilt XCFrameworks, a thin package surface, a reproducible rebuild pipeline, and a working sample app that downloads a model locally and runs on-device inference.
