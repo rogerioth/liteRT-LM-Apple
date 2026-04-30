@@ -14,7 +14,7 @@ This example app shows the intended integration path for this repository:
 Examples/LiteRTLMAppleExample/LiteRTLMAppleExample.xcodeproj
 ```
 
-On `feat/visionos-support`, the project is configured to resolve `LiteRTLMApple` from the matching GitHub branch through Swift Package Manager so the sample reflects the in-progress package state, including the new visionOS slices.
+On `feat/multimodal-image-input`, the project is configured to resolve `LiteRTLMApple` from the matching GitHub branch through Swift Package Manager so the sample reflects the in-progress package state, including the new visionOS slices.
 
 If you are running on a physical iOS device, choose your signing team in Xcode before building.
 
