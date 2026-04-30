@@ -14,14 +14,31 @@
 #      so direct pushes to main do not burn macOS minutes even if the project
 #      setting drifts.
 #
-# What this builds:
+# Why the matrix is small (just native macOS):
+#   The upstream `GemmaModelConstraintProvider` prebuilt dylibs (pulled via
+#   Git LFS from upstream LiteRT-LM) carry a baked iOS-family minOS of 26.2
+#   for the iOS-simulator and Mac Catalyst slices. CircleCI's macOS images
+#   currently top out at the Xcode 16.x line, which doesn't ship the iOS 26
+#   SDK, so iOS Simulator, Mac Catalyst, iOS device, and visionOS Simulator
+#   builds of the sample app cannot succeed on cloud CI today.
+#
+#   Native macOS is the one slice that compiles on Xcode 16 because:
+#     - the macOS XCFramework slice has minOS 14.0 (Xcode 16-compatible)
+#     - the sample's MACOSX_DEPLOYMENT_TARGET is 14.0
+#
+#   The other platforms remain validated locally on the developer's machine
+#   (which has Xcode 26+). When CircleCI's image catalog ships Xcode 26.x,
+#   re-add Catalyst, iOS Simulator, and visionOS Simulator steps below.
+#
+# What this validates on every PR:
 #   - Step 1: ./scripts/buildall.sh -- clones upstream LiteRT-LM at the pinned
-#     revision, applies the local export patch, builds iOS device, iOS sim,
-#     and macOS dylibs with bazelisk, and packages them as XCFrameworks.
-#     Catalyst and visionOS slices are derived via xcrun vtool.
-#   - Step 2: xcodebuild matrix on the sample app, against the freshly built
-#     XCFrameworks, for Mac Catalyst, native macOS, iOS Simulator, and
-#     visionOS Simulator.
+#     revision, applies the local export patch, and builds iOS device, iOS
+#     sim, and macOS dylibs with bazelisk, then derives Catalyst and visionOS
+#     slices via xcrun vtool. Catches upstream-pin breakage and
+#     export-patch drift.
+#   - Step 2: native-macOS xcodebuild on the sample app against the freshly
+#     built XCFrameworks. Catches sample-side regressions for any code that
+#     also runs in the macOS-only path (most of it).
 #
 #   The Bazel build cache is preserved across runs to keep incremental builds
 #   in the few-minute range; first ever run is ~30-60 minutes.
@@ -31,7 +48,7 @@ version: 2.1
 parameters:
   xcode-version:
     type: string
-    default: "26.4.0"
+    default: "16.4.0"
     description: "Xcode version available on the CircleCI macOS image."
 
 jobs:
@@ -100,22 +117,6 @@ jobs:
             xcodebuild -resolvePackageDependencies -project LiteRTLMAppleExample.xcodeproj
 
       - run:
-          name: Build sample for Mac Catalyst
-          command: |
-            cd Examples/LiteRTLMAppleExample
-            xcodebuild \
-              -project LiteRTLMAppleExample.xcodeproj \
-              -scheme LiteRTLMAppleExample \
-              -destination 'platform=macOS,variant=Mac Catalyst' \
-              -configuration Debug \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGN_IDENTITY= \
-              DEVELOPMENT_TEAM= \
-              build | tee /tmp/build-catalyst.log
-          no_output_timeout: 30m
-
-      - run:
           name: Build sample for native macOS
           command: |
             cd Examples/LiteRTLMAppleExample
@@ -131,65 +132,6 @@ jobs:
               build | tee /tmp/build-macos.log
           no_output_timeout: 30m
 
-      - run:
-          name: Build sample for iOS Simulator (arm64)
-          command: |
-            cd Examples/LiteRTLMAppleExample
-            SIM_ID="$(xcrun simctl list devices available -j | python3 -c '
-            import json, sys, re
-            data = json.load(sys.stdin)
-            best = None
-            best_ver = (0, 0)
-            for runtime, devices in data["devices"].items():
-                m = re.search(r"iOS-(\d+)-(\d+)", runtime)
-                if not m:
-                    continue
-                ver = (int(m.group(1)), int(m.group(2)))
-                if ver < (26, 0):
-                    continue
-                for d in devices:
-                    if d.get("isAvailable") and d.get("name", "").startswith("iPhone"):
-                        if ver > best_ver:
-                            best_ver = ver
-                            best = d["udid"]
-            if not best:
-                print("", end="")
-            else:
-                print(best, end="")
-            ')"
-            if [ -z "${SIM_ID}" ]; then
-              echo "No iOS 26+ simulator available on this image; skipping iOS Simulator build."
-              exit 0
-            fi
-            echo "Using simulator UDID: ${SIM_ID}"
-            xcodebuild \
-              -project LiteRTLMAppleExample.xcodeproj \
-              -scheme LiteRTLMAppleExample \
-              -destination "platform=iOS Simulator,id=${SIM_ID}" \
-              -configuration Debug \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGN_IDENTITY= \
-              DEVELOPMENT_TEAM= \
-              build | tee /tmp/build-iossim.log
-          no_output_timeout: 30m
-
-      - run:
-          name: Build sample for visionOS Simulator (arm64)
-          command: |
-            cd Examples/LiteRTLMAppleExample
-            xcodebuild \
-              -project LiteRTLMAppleExample.xcodeproj \
-              -scheme LiteRTLMAppleExample \
-              -destination 'platform=visionOS Simulator,arch=arm64,name=Apple Vision Pro' \
-              -configuration Debug \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGN_IDENTITY= \
-              DEVELOPMENT_TEAM= \
-              build | tee /tmp/build-visionsim.log
-          no_output_timeout: 30m
-
       - store_artifacts:
           path: Artifacts
           destination: xcframeworks
@@ -199,20 +141,8 @@ jobs:
           destination: engine.h
 
       - store_artifacts:
-          path: /tmp/build-catalyst.log
-          destination: build-logs/catalyst.log
-
-      - store_artifacts:
           path: /tmp/build-macos.log
           destination: build-logs/macos.log
-
-      - store_artifacts:
-          path: /tmp/build-iossim.log
-          destination: build-logs/iossim.log
-
-      - store_artifacts:
-          path: /tmp/build-visionsim.log
-          destination: build-logs/visionsim.log
 
 workflows:
   pr-validation:
