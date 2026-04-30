@@ -123,11 +123,19 @@ jobs:
               eval "unset $v" || true
             done
 
-            # Diagnostic dump.
-            echo "=== git config --list --show-origin ==="
-            git config --list --show-origin || true
+            # Diagnostic dump (file-only -- never invoke `git config` here,
+            # which can synchronously call the osxkeychain helper and hang
+            # forever waiting for a TTY prompt).
             echo "=== /etc/gitconfig (system) ==="
             cat /etc/gitconfig 2>/dev/null || echo "(missing)"
+            echo "=== /usr/local/etc/gitconfig (homebrew) ==="
+            cat /usr/local/etc/gitconfig 2>/dev/null || echo "(missing)"
+            echo "=== /opt/homebrew/etc/gitconfig (Apple Silicon homebrew) ==="
+            cat /opt/homebrew/etc/gitconfig 2>/dev/null || echo "(missing)"
+            echo "=== ~/.gitconfig (final state) ==="
+            cat "$HOME/.gitconfig" 2>/dev/null || echo "(missing)"
+            echo "=== ~/.netrc (should be missing now) ==="
+            cat "$HOME/.netrc" 2>/dev/null || echo "(missing)"
 
       - restore_cache:
           keys:
