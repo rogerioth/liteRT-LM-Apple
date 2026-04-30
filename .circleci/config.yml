@@ -59,6 +59,21 @@ jobs:
     environment:
       HOMEBREW_NO_AUTO_UPDATE: "1"
       HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      # CircleCI's macOS images preconfigure a global git credential helper
+      # that injects placeholder GitHub creds. For public repos with LFS that
+      # makes the LFS server return "Bad credentials" instead of letting the
+      # request be anonymous. Override the per-host helpers to empty for the
+      # whole job without rewriting any config files.
+      GIT_CONFIG_COUNT: "3"
+      GIT_CONFIG_KEY_0: "credential.helper"
+      GIT_CONFIG_VALUE_0: ""
+      GIT_CONFIG_KEY_1: "credential.https://github.com.helper"
+      GIT_CONFIG_VALUE_1: ""
+      GIT_CONFIG_KEY_2: "credential.https://api.github.com.helper"
+      GIT_CONFIG_VALUE_2: ""
+      # Never block on a TTY prompt -- if anything ever asks for input, fail
+      # fast instead of hanging the job.
+      GIT_TERMINAL_PROMPT: "0"
     steps:
       - checkout
 
@@ -76,19 +91,6 @@ jobs:
             brew install bazelisk git-lfs
             git lfs install
             bazelisk version || true
-
-      - run:
-          name: Clear stale CircleCI git credential helpers
-          command: |
-            # CircleCI's macOS images preconfigure a credential helper that
-            # injects placeholder GitHub creds. For public repos with LFS this
-            # makes the LFS server return "Bad credentials" instead of allowing
-            # anonymous fetches, which breaks the upstream LiteRT-LM clone.
-            git config --global --unset-all credential.helper || true
-            git config --global --unset-all credential.https://github.com.helper || true
-            rm -f "$HOME/.git-credentials" || true
-            echo "Remaining global git config:"
-            git config --global --list || true
 
       - restore_cache:
           keys:
