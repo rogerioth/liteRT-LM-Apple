@@ -98,7 +98,7 @@ jobs:
             #
             # The leading empty `helper =` clears any previously-set helper
             # for the credential section, then we deliberately do not set one.
-            cat >> "$HOME/.gitconfig" <<'EOF'
+            cat \<<'EOF' >> "$HOME/.gitconfig"
             [credential]
                 helper =
             [credential "https://github.com"]
