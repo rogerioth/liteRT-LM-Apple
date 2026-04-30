@@ -123,6 +123,22 @@ jobs:
               eval "unset $v" || true
             done
 
+            # Step 4: rewrite ~/.gitconfig so it strips the
+            # `[url "ssh://git@github.com"] insteadOf = https://github.com`
+            # rule that CircleCI's checkout step injects. That rule rewrites
+            # every HTTPS clone to SSH; git-lfs then asks GitHub for an
+            # SSH-derived LFS token using CircleCI's deploy key, which only
+            # has access to the user's own repo -- so a fetch from a
+            # different public repo (google-ai-edge/LiteRT-LM) returns
+            # "Bad credentials". We rewrite the file with awk to drop that
+            # url section entirely while preserving the LFS filter section.
+            awk '
+              BEGIN { skip = 0 }
+              /^\[url "ssh:\/\/git@github\.com"\]/ { skip = 1; next }
+              /^\[/ { skip = 0 }
+              skip == 0 { print }
+            ' "$HOME/.gitconfig" > "$HOME/.gitconfig.tmp" && mv "$HOME/.gitconfig.tmp" "$HOME/.gitconfig"
+
             # Diagnostic dump (file-only -- never invoke `git config` here,
             # which can synchronously call the osxkeychain helper and hang
             # forever waiting for a TTY prompt).
