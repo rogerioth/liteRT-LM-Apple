@@ -81,23 +81,19 @@ jobs:
             bazelisk version || true
 
       - run:
-          name: Neutralize credential helpers for LFS public-repo fetch
+          name: Neutralize credential helpers and netrc for LFS public-repo fetch
           command: |
-            # CircleCI's macOS image ships with /etc/gitconfig configured to
-            # use osxkeychain as a credential helper, and a stale credential
-            # entry for github.com that authenticates as the user's PAT.
-            # When git-lfs fetches public-repo objects from a *different*
-            # GitHub repo (google-ai-edge/LiteRT-LM), GitHub rejects those
-            # creds with "Bad credentials" instead of letting the fetch be
-            # anonymous.
+            # CircleCI's macOS image authenticates the user's repo checkout via
+            # ~/.netrc and/or a credential helper. When git-lfs fetches objects
+            # from a *different* public GitHub repo (google-ai-edge/LiteRT-LM),
+            # GitHub sees those stale creds and rejects with "Bad credentials"
+            # instead of letting the fetch go anonymous.
             #
-            # Append a no-op credential helper override to the user-level
-            # gitconfig. This is write-only -- no git commands are invoked --
-            # so it cannot hang on a keychain prompt the way `git config
-            # --global --list` did in pipeline 10.
-            #
-            # The leading empty `helper =` clears any previously-set helper
-            # for the credential section, then we deliberately do not set one.
+            # Step 1: append a no-op credential helper override to ~/.gitconfig.
+            # The leading empty `helper =` clears any previously-set helper.
+            # Pure file write -- no git commands -- so it cannot hang on a
+            # keychain prompt the way `git config --global --list` did in
+            # pipeline 10.
             cat \<<'EOF' >> "$HOME/.gitconfig"
             [credential]
                 helper =
@@ -109,6 +105,30 @@ jobs:
             echo "Updated ~/.gitconfig:"
             cat "$HOME/.gitconfig"
 
+            # Step 2: blank out ~/.netrc so neither git nor git-lfs sends
+            # cached basic-auth credentials for github.com. We move it aside
+            # rather than delete so that if the checkout step somehow needs
+            # it again later, the user can restore it.
+            if [ -f "$HOME/.netrc" ]; then
+              echo "Found ~/.netrc; moving aside."
+              mv "$HOME/.netrc" "$HOME/.netrc.circleci.bak"
+            fi
+
+            # Step 3: also clear any leaked GitHub tokens from the env that
+            # git-lfs's batch API helpers might pick up.
+            for v in GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_AUTH_TOKEN; do
+              if [ -n "$(eval "echo \$$v")" ]; then
+                echo "Clearing $v"
+              fi
+              eval "unset $v" || true
+            done
+
+            # Diagnostic dump.
+            echo "=== git config --list --show-origin ==="
+            git config --list --show-origin || true
+            echo "=== /etc/gitconfig (system) ==="
+            cat /etc/gitconfig 2>/dev/null || echo "(missing)"
+
       - restore_cache:
           keys:
             - litertlm-bazel-cache-v1-{{ checksum "scripts/subscripts/common.sh" }}-{{ checksum "patches/0001-export-ios-shared-engine-dylib.patch" }}
@@ -117,7 +137,15 @@ jobs:
 
       - run:
           name: Run full rebuild pipeline (buildall.sh)
-          command: ./scripts/buildall.sh
+          command: |
+            # Defer LFS smudging until the explicit `git lfs pull` inside
+            # clone_upstream.sh. If a single LFS file (e.g. the android_arm64
+            # prebuilt we don't need) auth-fails during smudge, the entire
+            # clone aborts -- but with smudge skipped, the clone always
+            # succeeds and the explicit pull can run anonymously after our
+            # netrc / gitconfig neutralization.
+            export GIT_LFS_SKIP_SMUDGE=1
+            ./scripts/buildall.sh
           no_output_timeout: 60m
 
       - save_cache:
