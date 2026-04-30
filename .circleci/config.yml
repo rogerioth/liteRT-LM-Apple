@@ -1,31 +1,226 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
-# See: https://circleci.com/docs/reference/configuration-reference
+# CircleCI configuration for liteRT-LM-Apple.
+#
+# Triggering policy:
+#   This pipeline is intended to run only when a pull request is opened against
+#   `main`, or when commits are pushed to a branch that has an open PR.
+#
+#   Two layers gate this:
+#
+#   1. Project Settings -> Advanced -> "Only build pull requests" must be ON in
+#      the CircleCI UI. That is the authoritative trigger gate -- without it,
+#      every push to any branch will hit this config.
+#
+#   2. The workflow's `when:` filter below skips the default branch (`main`),
+#      so direct pushes to main do not burn macOS minutes even if the project
+#      setting drifts.
+#
+# What this builds:
+#   - Step 1: ./scripts/buildall.sh -- clones upstream LiteRT-LM at the pinned
+#     revision, applies the local export patch, builds iOS device, iOS sim,
+#     and macOS dylibs with bazelisk, and packages them as XCFrameworks.
+#     Catalyst and visionOS slices are derived via xcrun vtool.
+#   - Step 2: xcodebuild matrix on the sample app, against the freshly built
+#     XCFrameworks, for Mac Catalyst, native macOS, iOS Simulator, and
+#     visionOS Simulator.
+#
+#   The Bazel build cache is preserved across runs to keep incremental builds
+#   in the few-minute range; first ever run is ~30-60 minutes.
+
 version: 2.1
 
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
+parameters:
+  xcode-version:
+    type: string
+    default: "26.4.0"
+    description: "Xcode version available on the CircleCI macOS image."
+
 jobs:
-  say-hello:
-    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/guides/execution-managed/executor-intro/ & https://circleci.com/docs/reference/configuration-reference/#executor-job
-    docker:
-      # Specify the version you desire here
-      # See: https://circleci.com/developer/images/image/cimg/base
-      - image: cimg/base:current
-
-    # Add steps to the job
-    # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#steps-overview & https://circleci.com/docs/reference/configuration-reference/#steps
+  build-and-validate:
+    macos:
+      xcode: << parameters.xcode-version >>
+    resource_class: macos.m4pro.medium
+    environment:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
     steps:
-      # Checkout the code as the first step.
       - checkout
-      - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
 
-# Orchestrate jobs using workflows
-# See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
+      - run:
+          name: Print toolchain versions
+          command: |
+            xcodebuild -version
+            sw_vers
+            uname -a
+            git --version
+
+      - run:
+          name: Install bazelisk and git-lfs
+          command: |
+            brew install bazelisk git-lfs
+            git lfs install
+            bazelisk version || true
+
+      - restore_cache:
+          keys:
+            - litertlm-bazel-cache-v1-{{ checksum "scripts/subscripts/common.sh" }}-{{ checksum "patches/0001-export-ios-shared-engine-dylib.patch" }}
+            - litertlm-bazel-cache-v1-{{ checksum "scripts/subscripts/common.sh" }}-
+            - litertlm-bazel-cache-v1-
+
+      - run:
+          name: Run full rebuild pipeline (buildall.sh)
+          command: ./scripts/buildall.sh
+          no_output_timeout: 60m
+
+      - save_cache:
+          key: litertlm-bazel-cache-v1-{{ checksum "scripts/subscripts/common.sh" }}-{{ checksum "patches/0001-export-ios-shared-engine-dylib.patch" }}
+          paths:
+            - ~/Library/Caches/bazelisk
+            - ~/.cache/bazelisk
+            - .worktree
+
+      - run:
+          name: Verify XCFramework slice manifest
+          command: |
+            set -eu
+            for fw in Artifacts/LiteRTLMEngineCPU.xcframework Artifacts/GemmaModelConstraintProvider.xcframework; do
+              echo "==> ${fw}"
+              ls "${fw}"
+              for slice in ios-arm64 ios-arm64-simulator ios-arm64-maccatalyst macos-arm64 xros-arm64 xros-arm64-simulator; do
+                if [ ! -d "${fw}/${slice}" ]; then
+                  echo "Missing slice: ${fw}/${slice}" >&2
+                  exit 1
+                fi
+              done
+            done
+
+      - run:
+          name: Resolve sample SPM dependencies
+          command: |
+            cd Examples/LiteRTLMAppleExample
+            xcodebuild -resolvePackageDependencies -project LiteRTLMAppleExample.xcodeproj
+
+      - run:
+          name: Build sample for Mac Catalyst
+          command: |
+            cd Examples/LiteRTLMAppleExample
+            xcodebuild \
+              -project LiteRTLMAppleExample.xcodeproj \
+              -scheme LiteRTLMAppleExample \
+              -destination 'platform=macOS,variant=Mac Catalyst' \
+              -configuration Debug \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY= \
+              DEVELOPMENT_TEAM= \
+              build | tee /tmp/build-catalyst.log
+          no_output_timeout: 30m
+
+      - run:
+          name: Build sample for native macOS
+          command: |
+            cd Examples/LiteRTLMAppleExample
+            xcodebuild \
+              -project LiteRTLMAppleExample.xcodeproj \
+              -scheme LiteRTLMAppleExample \
+              -destination 'platform=macOS' \
+              -configuration Debug \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY= \
+              DEVELOPMENT_TEAM= \
+              build | tee /tmp/build-macos.log
+          no_output_timeout: 30m
+
+      - run:
+          name: Build sample for iOS Simulator (arm64)
+          command: |
+            cd Examples/LiteRTLMAppleExample
+            SIM_ID="$(xcrun simctl list devices available -j | python3 -c '
+            import json, sys, re
+            data = json.load(sys.stdin)
+            best = None
+            best_ver = (0, 0)
+            for runtime, devices in data["devices"].items():
+                m = re.search(r"iOS-(\d+)-(\d+)", runtime)
+                if not m:
+                    continue
+                ver = (int(m.group(1)), int(m.group(2)))
+                if ver < (26, 0):
+                    continue
+                for d in devices:
+                    if d.get("isAvailable") and d.get("name", "").startswith("iPhone"):
+                        if ver > best_ver:
+                            best_ver = ver
+                            best = d["udid"]
+            if not best:
+                print("", end="")
+            else:
+                print(best, end="")
+            ')"
+            if [ -z "${SIM_ID}" ]; then
+              echo "No iOS 26+ simulator available on this image; skipping iOS Simulator build."
+              exit 0
+            fi
+            echo "Using simulator UDID: ${SIM_ID}"
+            xcodebuild \
+              -project LiteRTLMAppleExample.xcodeproj \
+              -scheme LiteRTLMAppleExample \
+              -destination "platform=iOS Simulator,id=${SIM_ID}" \
+              -configuration Debug \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY= \
+              DEVELOPMENT_TEAM= \
+              build | tee /tmp/build-iossim.log
+          no_output_timeout: 30m
+
+      - run:
+          name: Build sample for visionOS Simulator (arm64)
+          command: |
+            cd Examples/LiteRTLMAppleExample
+            xcodebuild \
+              -project LiteRTLMAppleExample.xcodeproj \
+              -scheme LiteRTLMAppleExample \
+              -destination 'platform=visionOS Simulator,arch=arm64,name=Apple Vision Pro' \
+              -configuration Debug \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY= \
+              DEVELOPMENT_TEAM= \
+              build | tee /tmp/build-visionsim.log
+          no_output_timeout: 30m
+
+      - store_artifacts:
+          path: Artifacts
+          destination: xcframeworks
+
+      - store_artifacts:
+          path: Sources/LiteRTLMApple/include/engine.h
+          destination: engine.h
+
+      - store_artifacts:
+          path: /tmp/build-catalyst.log
+          destination: build-logs/catalyst.log
+
+      - store_artifacts:
+          path: /tmp/build-macos.log
+          destination: build-logs/macos.log
+
+      - store_artifacts:
+          path: /tmp/build-iossim.log
+          destination: build-logs/iossim.log
+
+      - store_artifacts:
+          path: /tmp/build-visionsim.log
+          destination: build-logs/visionsim.log
+
 workflows:
-  say-hello-workflow: # This is the name of the workflow, feel free to change it to better match your workflow.
-    # Inside the workflow, you define the jobs you want to run.
+  pr-validation:
+    # Skip the default branch even if "Only build pull requests" is disabled in
+    # CircleCI project settings. The project setting is still required for the
+    # full PR-only behavior.
+    when:
+      not:
+        equal: [ main, << pipeline.git.branch >> ]
     jobs:
-      - say-hello
+      - build-and-validate
