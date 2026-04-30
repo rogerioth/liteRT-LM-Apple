@@ -37,7 +37,7 @@ parameters:
 jobs:
   build-and-validate:
     macos:
-      xcode: << parameters.xcode-version >>
+      xcode: << pipeline.parameters.xcode-version >>
     resource_class: macos.m4pro.medium
     environment:
       HOMEBREW_NO_AUTO_UPDATE: "1"
