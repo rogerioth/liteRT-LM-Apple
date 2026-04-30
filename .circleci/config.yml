@@ -1,18 +1,18 @@
 # CircleCI configuration for liteRT-LM-Apple.
 #
 # Triggering policy:
-#   This pipeline is intended to run only when a pull request is opened against
-#   `main`, or when commits are pushed to a branch that has an open PR.
+#   This pipeline runs when a pull request is opened against `main`, when
+#   commits are pushed to a branch that has an open PR, OR when commits land
+#   directly on `main`. The last case keeps the README's CircleCI status
+#   badge in sync with the latest main-branch state.
 #
-#   Two layers gate this:
-#
-#   1. Project Settings -> Advanced -> "Only build pull requests" must be ON in
-#      the CircleCI UI. That is the authoritative trigger gate -- without it,
-#      every push to any branch will hit this config.
-#
-#   2. The workflow's `when:` filter below skips the default branch (`main`),
-#      so direct pushes to main do not burn macOS minutes even if the project
-#      setting drifts.
+#   The gate lives in CircleCI Project Settings -> Advanced -> "Only build
+#   pull requests". When that toggle is ON, CircleCI builds:
+#     - every push to the default branch (main), AND
+#     - every push to a branch that has an open pull request,
+#   and skips pushes to other branches that have no open PR. That toggle is
+#   the authoritative gate -- with it OFF, every push to every branch will
+#   hit this config.
 #
 # Why the matrix is small (just native macOS):
 #   The upstream `GemmaModelConstraintProvider` prebuilt dylibs (pulled via
@@ -229,12 +229,10 @@ jobs:
           destination: build-logs/macos.log
 
 workflows:
-  pr-validation:
-    # Skip the default branch even if "Only build pull requests" is disabled in
-    # CircleCI project settings. The project setting is still required for the
-    # full PR-only behavior.
-    when:
-      not:
-        equal: [ main, << pipeline.git.branch >> ]
+  validation:
+    # No `when:` filter here: we want this workflow to run on every trigger
+    # CircleCI delivers. Branch-level gating is enforced by the "Only build
+    # pull requests" project setting (see header comment), which already
+    # restricts non-main branches to PR-only and always allows main.
     jobs:
       - build-and-validate
