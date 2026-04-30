@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/rogerioth/liteRT-LM-Apple.git",
       "state" : {
-        "branch" : "feat/visionos-support",
-        "revision" : "f1896bf6dec70a7c0eb48f1aec582d82834a707f"
+        "branch" : "main",
+        "revision" : "6f604d675dc374bdb599703cb2b1000b9f025f38"
       }
     }
   ],

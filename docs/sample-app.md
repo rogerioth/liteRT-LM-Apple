@@ -30,7 +30,7 @@ These models are pinned in `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/M
 
 ## Current Branch Setup
 
-On `feat/multimodal-image-input`, the sample project resolves `LiteRTLMApple` from the matching GitHub branch instead of the last tagged release. That keeps the example closer to the real remote-consumption path while the visionOS support work is still in flight.
+The sample project resolves `LiteRTLMApple` from the GitHub `main` branch instead of the last tagged release. That keeps the example closer to the real remote-consumption path while the visionOS and multimodal work is still in flight ahead of the next release cut.
 
 ## What To Change First
 
