@@ -6,3 +6,6 @@ work/
 xcuserdata/
 .DS_Store
 *.profraw
+
+# Local Claude Code state (scheduled task locks, transient cache).
+.claude/
