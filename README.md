@@ -1,6 +1,7 @@
 # LiteRT-LM-Apple
 
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/rogerioth/liteRT-LM-Apple/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/rogerioth/liteRT-LM-Apple/tree/main)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=rogerioth_liteRT-LM-Apple&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=rogerioth_liteRT-LM-Apple)
 
 If you want to run LiteRT-LM models inside an iPhone, iPad, Apple Vision Pro, Mac, or Mac Catalyst app, but you do not want to spend your time packaging upstream Apple binaries by hand, this repository is for you.
 
