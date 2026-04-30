@@ -26,11 +26,11 @@ dependencies: [
 ]
 ```
 
-If you are evaluating this feature branch before the next tagged release, you can point SPM at the in-flight branch instead:
+If you want to track the latest unreleased package state (visionOS support, multimodal image input, refreshed upstream pin) before the next tagged release, you can point SPM at `main` instead:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", branch: "feat/multimodal-image-input")
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", branch: "main")
 ]
 ```
 

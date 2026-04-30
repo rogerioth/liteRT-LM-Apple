@@ -54,7 +54,7 @@ If you want to integrate this package into another app, use the GitHub repositor
 - repository URL: `https://github.com/rogerioth/liteRT-LM-Apple.git`
 - current release: `v0.2.3`
 
-This feature branch adds visionOS support ahead of the next release. The sample app on this branch intentionally resolves the package from `feat/multimodal-image-input` over GitHub SPM so you can validate the in-flight package state before the next tag is published.
+This branch's sample app intentionally resolves the package from `main` over GitHub SPM so the example tracks the latest unreleased package state (visionOS support, multimodal image input) until the next tag is cut.
 
 In Xcode:
 
