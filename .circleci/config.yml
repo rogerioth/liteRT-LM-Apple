@@ -216,6 +216,37 @@ jobs:
               build | tee /tmp/build-macos.log
           no_output_timeout: 30m
 
+      - run:
+          name: SonarQube Cloud scan
+          command: |
+            # Skip cleanly if SONAR_TOKEN isn't configured (e.g. on a fork
+            # PR where CircleCI strips secret env vars). The rest of the
+            # pipeline still produces useful output.
+            if [ -z "${SONAR_TOKEN:-}" ]; then
+              echo "SONAR_TOKEN not set; skipping SonarQube Cloud scan."
+              exit 0
+            fi
+
+            brew install sonar-scanner
+
+            # When the build is triggered by a PR, point the scanner at
+            # the PR so SonarCloud decorates the PR conversation. On main
+            # pushes we leave the PR-specific args off so SonarCloud
+            # records the result against the main branch.
+            EXTRA_ARGS=""
+            if [ -n "${CIRCLE_PULL_REQUEST:-}" ]; then
+              PR_NUMBER="${CIRCLE_PULL_REQUEST##*/}"
+              EXTRA_ARGS="-Dsonar.pullrequest.key=${PR_NUMBER} -Dsonar.pullrequest.branch=${CIRCLE_BRANCH} -Dsonar.pullrequest.base=main"
+            else
+              EXTRA_ARGS="-Dsonar.branch.name=${CIRCLE_BRANCH}"
+            fi
+
+            sonar-scanner \
+              -Dsonar.host.url=https://sonarcloud.io \
+              -Dsonar.token="${SONAR_TOKEN}" \
+              ${EXTRA_ARGS}
+          no_output_timeout: 15m
+
       - store_artifacts:
           path: Artifacts
           destination: xcframeworks
