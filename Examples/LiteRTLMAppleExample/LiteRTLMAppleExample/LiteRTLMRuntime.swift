@@ -135,6 +135,23 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             litert_lm_engine_settings_set_prefill_chunk_size(settings, prefillChunkSize)
         }
 
+        if let rawPrefillBatchSizes = environment["LITERT_LM_PREFILL_BATCH_SIZES"] {
+            if let prefillBatchSizes = Self.prefillBatchSizes(rawPrefillBatchSizes) {
+                prefillBatchSizes.withUnsafeBufferPointer { buffer in
+                    litert_lm_engine_settings_set_prefill_batch_sizes(
+                        settings,
+                        buffer.baseAddress,
+                        Int32(buffer.count)
+                    )
+                }
+            } else {
+                ConsoleLog.error(
+                    "Ignoring invalid LITERT_LM_PREFILL_BATCH_SIZES=\(rawPrefillBatchSizes).",
+                    category: "Runtime"
+                )
+            }
+        }
+
         let defaultCPUKernelModeName = Self.defaultCPUKernelModeName(
             modelURL: modelURL,
             backendName: normalizedBackendName,
@@ -159,7 +176,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             litert_lm_engine_settings_enable_benchmark(settings)
         }
         ConsoleLog.debug(
-            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(environment["LITERT_LM_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(environment["LITERT_LM_MAX_NUM_TOKENS"] ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled").",
+            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(environment["LITERT_LM_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(environment["LITERT_LM_MAX_NUM_TOKENS"] ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") prefill_batch_sizes=\(environment["LITERT_LM_PREFILL_BATCH_SIZES"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled").",
             category: "Runtime"
         )
 
@@ -345,6 +362,19 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         default:
             return nil
         }
+    }
+
+    private static func prefillBatchSizes(_ value: String) -> [Int32]? {
+        let parts = value.split(separator: ",", omittingEmptySubsequences: false)
+        guard !parts.isEmpty else { return nil }
+        var sizes: [Int32] = []
+        sizes.reserveCapacity(parts.count)
+        for part in parts {
+            let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let size = Int32(trimmed), size > 0 else { return nil }
+            sizes.append(size)
+        }
+        return sizes.isEmpty ? nil : sizes
     }
 
     private static func runtimeLibraryDirectory() -> URL {

@@ -359,6 +359,16 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_enable_speculative_decoding(
     LiteRtLmEngineSettings* settings, bool enable_speculative_decoding);
 
+// Sets the prefill batch sizes used by LiteRT-LM magic-number rewriting.
+//
+// @param settings The engine settings.
+// @param prefill_batch_sizes An array of positive prefill batch sizes.
+// @param count The number of entries in prefill_batch_sizes.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_prefill_batch_sizes(
+    LiteRtLmEngineSettings* settings, const int* prefill_batch_sizes,
+    int count);
+
 // Creates a LiteRT LM Engine from the given settings. The caller is responsible
 // for destroying the engine using `litert_lm_engine_delete`.
 //

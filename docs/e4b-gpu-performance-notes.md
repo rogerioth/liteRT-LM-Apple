@@ -1,6 +1,6 @@
 # Gemma 4 E4B GPU Performance Notes
 
-This note captures the May 2026 iPhone 17 Pro Max comparison between this sample app and Google's AI Edge Gallery app for Gemma 4 E4B multimodal inference.
+This note captures the May 2026 iPhone comparison between this sample app and Google's AI Edge Gallery app for Gemma 4 E4B multimodal inference.
 
 ## Device
 
@@ -8,6 +8,8 @@ This note captures the May 2026 iPhone 17 Pro Max comparison between this sample
 - CoreDevice identifier: `CC1CADAF-F0B4-55B7-A69C-825ECB48E6C9`
 - Hardware: `iPhone18,2`
 - OS: iOS `26.4.2`
+- Also tested on Rogerio's iPhone 16 Pro Max
+- CoreDevice identifier: `70755C95-F229-5DA3-82B3-23B3156E3AD0`
 
 ## Current sample app behavior
 
@@ -99,6 +101,36 @@ RunDecodeAsync
 
 The timestamps in the console log put Edge Gallery prefill at roughly 2.1 seconds after image preprocessing started. This is consistent with Edge Gallery using the main GPU executor, not CPU built-in kernels.
 
+## Main-GPU retests
+
+Retests on the iPhone 16 Pro Max used the rebuilt local LiteRT-LM dylib and the public Hugging Face artifact:
+
+```text
+gemma-4-E4B-it.litertlm
+size: 3654467584 bytes
+main section signatures: decode, prefill_1024, prefill_128, verify
+extra section: tf_lite_mtp_drafter, backend_constraint=cpu
+```
+
+The Edge Gallery artifact is different:
+
+```text
+gemma4_4b_v09_obfus_fix_all_modalities_thinking.litertlm
+main section signatures: decode, prefill_16, prefill_256, verify
+no tf_lite_mtp_drafter section observed
+```
+
+Observed main-GPU outcomes:
+
+- `backend=gpu vision_backend=gpu max_tokens=4000 max_num_images=10`: failed during main GPU `CompiledModel::Create` with `Failed to allocate id<MTLTexture>`.
+- `prefill_batch_sizes=16,256`: setting was applied, but LiteRT logged `Too many prefill batch sizes=2 for magic numbers of prefill lengths=0`, kept `prefill_1024` and `prefill_128`, and failed the same way.
+- `activation_data_type=FLOAT16`: main GPU compilation progressed, then the process crashed while bringing up the E4B vision path.
+- `max_tokens=2048 max_num_images=1`: main GPU compiled, but the per-layer embedder mmap failed and the vision encoder failed to allocate Metal textures.
+- `max_tokens=1024 max_num_images=1`: per-layer embedder mapped, but the vision encoder section failed to mmap.
+- `max_tokens=512 max_num_images=1`: per-layer embedder and vision model mapping progressed farther, then the vision encoder crashed during GPU initialization.
+
+These failures happen before prompt-size or image-size choices can matter. The public artifact's all-GPU memory footprint is too high for this runtime/device combination even when the runtime settings are made smaller than Edge Gallery's.
+
 ## Current conclusion
 
 The performance gap is not primarily an image-size issue. Edge Gallery is fast because its E4B path uses:
@@ -107,23 +139,19 @@ The performance gap is not primarily an image-size issue. Edge Gallery is fast b
 - Vision encoder on GPU.
 - Vision adapter on CPU.
 - Parallel section loading.
-- Several GPU advanced settings that are not currently exposed/configured by this package.
-- A different Google-hosted E4B model artifact name than the sample app's Hugging Face artifact.
+- A different Google-hosted E4B model artifact than the sample app's Hugging Face artifact.
 
-The current sample app fix proves `vision_backend=gpu` can work correctly, but it does not match Edge Gallery performance because it deliberately avoids the main GPU executor.
+The current sample app fix proves `vision_backend=gpu` can work correctly, but it does not match Edge Gallery performance because it deliberately avoids the main GPU executor. The all-GPU retests show that exposing more app-level settings is not sufficient for the public E4B artifact: the artifact's main signatures and memory behavior differ from the Edge Gallery artifact.
 
 ## Next investigation path
 
-To match Edge Gallery, investigate these in order:
+To match Edge Gallery, the likely required work is one of:
 
-1. Test the exact Edge Gallery E4B artifact in this sample app:
-   `gemma4_4b_v09_obfus_fix_all_modalities_thinking.litertlm`.
-2. Re-test `backend=gpu vision_backend=gpu` using that artifact.
-3. Compare LiteRT-LM engine settings with Edge Gallery and expose missing C API knobs if needed:
-   `convert_weights_on_gpu`, `share_constant_tensors`, `optimize_shader_compilation`, `disable_delegate_clustering`, `sampler_handles_input`, `allow_src_quantized_fc_conv_ops`, and parallel section loading.
-4. Check whether Edge Gallery is using a newer or different LiteRT-LM revision than the pinned Google source used by this repo's patch/build flow.
-5. Check whether the GPU accelerator linkage matters for main-GPU E4B:
-   Edge Gallery logs static GPU accelerator registration, while this repo currently packages the Metal accelerator for dynamic loading.
+1. Publish/use an E4B artifact exported like Edge Gallery's model, with smaller GPU-compatible main signatures such as `prefill_16` and `prefill_256`.
+2. Add upstream LiteRT/LiteRT-LM support for compiling only the signatures that will actually be used, or for lazily compiling signatures instead of compiling the whole `tf_lite_prefill_decode` section in `CompiledModel::Create`.
+3. Investigate whether a newer internal LiteRT GPU compiler/runtime has memory behavior that the public LiteRT-LM source does not yet have.
+
+The local package now exposes `LITERT_LM_PREFILL_BATCH_SIZES` for diagnostics and for models that do carry prefill-length magic numbers. It does not fix this public E4B artifact because that artifact exposes no prefill-length magic numbers for LiteRT to rewrite.
 
 ## Useful local log artifacts
 
@@ -135,4 +163,10 @@ These files were generated during the investigation and may exist only in the lo
 .worktree/e2b-default-vision-gpu-img1500-max448-after-fallback.log
 .worktree/e4b-17pm-default-vision-gpu-img1500-max448.log
 .worktree/edge-gallery-17pm-console.log
+.worktree/e4b-16pm-main-gpu-vision-gpu-edge-settings.log
+.worktree/e4b-16pm-main-gpu-vision-gpu-prefill16-256.log
+.worktree/e4b-16pm-main-gpu-vision-gpu-max2048.log
+.worktree/e4b-16pm-main-gpu-vision-gpu-max2048-img1.log
+.worktree/e4b-16pm-main-gpu-vision-gpu-max1024-img1.log
+.worktree/e4b-16pm-main-gpu-vision-gpu-max512-img1.log
 ```
