@@ -27,6 +27,9 @@ printf '/* test engine header */\n' > "${upstream_dir}/c/engine.h"
 printf 'fake Mach-O constraint\n' > "${upstream_dir}/prebuilt/ios_arm64/libGemmaModelConstraintProvider.dylib"
 printf 'fake Mach-O constraint\n' > "${upstream_dir}/prebuilt/ios_sim_arm64/libGemmaModelConstraintProvider.dylib"
 printf 'fake Mach-O constraint\n' > "${upstream_dir}/prebuilt/macos_arm64/libGemmaModelConstraintProvider.dylib"
+printf 'fake Mach-O metal accelerator\n' > "${upstream_dir}/prebuilt/ios_arm64/libLiteRtMetalAccelerator.dylib"
+printf 'fake Mach-O metal accelerator\n' > "${upstream_dir}/prebuilt/ios_sim_arm64/libLiteRtMetalAccelerator.dylib"
+printf 'fake Mach-O metal accelerator\n' > "${upstream_dir}/prebuilt/macos_arm64/libLiteRtMetalAccelerator.dylib"
 
 cat > "${fake_bin}/bazelisk" <<'STUB'
 #!/usr/bin/env bash
@@ -159,6 +162,12 @@ fi
 engine_builds="$(grep -c '//c:engine_shared' "${command_log}" || true)"
 if [[ "${engine_builds}" -ne 3 ]]; then
   echo "FAIL: expected 3 engine_shared builds, found ${engine_builds}." >&2
+  cat "${command_log}" >&2
+  exit 1
+fi
+
+if ! grep -q 'LiteRtMetalAccelerator.xcframework' "${command_log}"; then
+  echo "FAIL: expected the Metal accelerator dylib to be packaged as an XCFramework." >&2
   cat "${command_log}" >&2
   exit 1
 fi
