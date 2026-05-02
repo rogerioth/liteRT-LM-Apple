@@ -20,5 +20,7 @@ require_pattern "litert_lm_engine_settings_set_runtime_library_dir" "the C API r
 require_pattern "EnvironmentOptions::Tag::kRuntimeLibraryDir" "the LiteRT runtime library directory environment option"
 require_pattern "GetLitertDispatchLibDir" "the stored runtime library directory lookup"
 require_pattern "static_cast<int64_t>(ToLiteRtLogSeverityInt8" "int64 LiteRT min-log-severity environment option"
+require_pattern "ActivationDataType::FLOAT16" "FP16 default for the vision GPU executor"
+require_pattern "GetMutableVisionExecutorSettings" "C settings propagation to the vision executor"
 
 echo "PASS: LiteRT-LM patch configures the GPU runtime library directory."

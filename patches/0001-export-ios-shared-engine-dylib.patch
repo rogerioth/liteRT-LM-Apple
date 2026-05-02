@@ -43,10 +43,27 @@ index 4e157c2f..d02c85d1 100644
      name = "engine_test",
      srcs = ["engine_test.cc"],
 diff --git a/c/engine.cc b/c/engine.cc
-index 28b8518c..87f0c425 100644
+index 28b8518c..76ecb437 100644
 --- a/c/engine.cc
 +++ b/c/engine.cc
-@@ -385,6 +385,14 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
+@@ -378,6 +378,16 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
+     executor_settings.SetActivationDataType(
+         litert::lm::ActivationDataType::FLOAT32);
+   }
++  if (vision_backend == litert::lm::Backend::GPU) {
++    // The E4B vision encoder can exceed Metal texture allocation limits with
++    // the upstream FP32 default. Use FP16 for vision GPU unless callers
++    // explicitly override it later through the activation data type setter.
++    auto& vision_settings = engine_settings->GetMutableVisionExecutorSettings();
++    if (vision_settings.has_value()) {
++      vision_settings->SetActivationDataType(
++          litert::lm::ActivationDataType::FLOAT16);
++    }
++  }
+ 
+   auto* c_settings = new LiteRtLmEngineSettings;
+   c_settings->settings =
+@@ -385,6 +395,14 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
    return c_settings;
  }
  
@@ -61,7 +78,7 @@ index 28b8518c..87f0c425 100644
  void litert_lm_engine_settings_delete(LiteRtLmEngineSettings* settings) {
    delete settings;
  }
-@@ -396,6 +404,15 @@ void litert_lm_engine_settings_set_max_num_tokens(
+@@ -396,6 +414,15 @@ void litert_lm_engine_settings_set_max_num_tokens(
          max_num_tokens);
    }
  }
@@ -77,6 +94,43 @@ index 28b8518c..87f0c425 100644
  void litert_lm_engine_settings_set_parallel_file_section_loading(
      LiteRtLmEngineSettings* settings, bool parallel_file_section_loading) {
    if (settings && settings->settings) {
+@@ -408,6 +435,15 @@ void litert_lm_engine_settings_set_cache_dir(LiteRtLmEngineSettings* settings,
+                                              const char* cache_dir) {
+   if (settings && settings->settings) {
+     settings->settings->GetMutableMainExecutorSettings().SetCacheDir(cache_dir);
++    auto& vision_settings =
++        settings->settings->GetMutableVisionExecutorSettings();
++    if (vision_settings.has_value()) {
++      vision_settings->SetCacheDir(cache_dir);
++    }
++    auto& audio_settings = settings->settings->GetMutableAudioExecutorSettings();
++    if (audio_settings.has_value()) {
++      audio_settings->SetCacheDir(cache_dir);
++    }
+   }
+ }
+ 
+@@ -448,8 +484,19 @@ void litert_lm_engine_settings_set_enable_speculative_decoding(
+ void litert_lm_engine_settings_set_activation_data_type(
+     LiteRtLmEngineSettings* settings, int activation_data_type_int) {
+   if (settings && settings->settings) {
++    auto activation_data_type =
++        static_cast<litert::lm::ActivationDataType>(activation_data_type_int);
+     settings->settings->GetMutableMainExecutorSettings().SetActivationDataType(
+-        static_cast<litert::lm::ActivationDataType>(activation_data_type_int));
++        activation_data_type);
++    auto& vision_settings =
++        settings->settings->GetMutableVisionExecutorSettings();
++    if (vision_settings.has_value()) {
++      vision_settings->SetActivationDataType(activation_data_type);
++    }
++    auto& audio_settings = settings->settings->GetMutableAudioExecutorSettings();
++    if (audio_settings.has_value()) {
++      audio_settings->SetActivationDataType(activation_data_type);
++    }
+   }
+ }
+ 
 diff --git a/c/engine.h b/c/engine.h
 index aa1eec8b..7c2a6ec4 100644
 --- a/c/engine.h
