@@ -34,6 +34,7 @@ The current checked-in iOS simulator, visionOS simulator, and Catalyst artifacts
 - cache storage under Caches
 - a small Swift wrapper around the C conversation API
 - default `gpu` main backend and `gpu` vision backend for image prompts
+- compiled-shaders-only GPU cache defaults for both main and vision executors
 - benchmark display for initialization, time to first token, prefill, and decode
 - structured `print` logging for downloads, runtime setup, inference, and errors in the Xcode console
 

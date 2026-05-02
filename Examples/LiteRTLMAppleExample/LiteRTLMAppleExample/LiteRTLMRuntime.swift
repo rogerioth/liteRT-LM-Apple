@@ -237,36 +237,36 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             }
         }
 
+        let defaultAdvancedBoolValues = Self.defaultAdvancedBoolValues(
+            mainBackendName: normalizedBackendName
+        )
         for advancedBoolSetting in Self.advancedBoolSettings {
-            if let rawValue = environment[advancedBoolSetting.environmentKey] {
-                if let enabled = Bool(rawValue) {
-                    litert_lm_engine_settings_set_advanced_bool(
-                        settings,
-                        advancedBoolSetting.option,
-                        enabled
-                    )
-                } else {
-                    ConsoleLog.error(
-                        "Ignoring invalid \(advancedBoolSetting.environmentKey)=\(rawValue).",
-                        category: "Runtime"
-                    )
-                }
+            if let enabled = Self.resolvedBoolSetting(
+                advancedBoolSetting.environmentKey,
+                environment: environment,
+                defaultValues: defaultAdvancedBoolValues
+            ) {
+                litert_lm_engine_settings_set_advanced_bool(
+                    settings,
+                    advancedBoolSetting.option,
+                    enabled
+                )
             }
         }
+        let defaultVisionGpuBoolValues = Self.defaultVisionGpuBoolValues(
+            visionBackendName: usesVisionBackend ? normalizedVisionBackendName : nil
+        )
         for advancedBoolSetting in Self.visionGpuBoolSettings {
-            if let rawValue = environment[advancedBoolSetting.environmentKey] {
-                if let enabled = Bool(rawValue) {
-                    litert_lm_engine_settings_set_vision_gpu_bool(
-                        settings,
-                        advancedBoolSetting.option,
-                        enabled
-                    )
-                } else {
-                    ConsoleLog.error(
-                        "Ignoring invalid \(advancedBoolSetting.environmentKey)=\(rawValue).",
-                        category: "Runtime"
-                    )
-                }
+            if let enabled = Self.resolvedBoolSetting(
+                advancedBoolSetting.environmentKey,
+                environment: environment,
+                defaultValues: defaultVisionGpuBoolValues
+            ) {
+                litert_lm_engine_settings_set_vision_gpu_bool(
+                    settings,
+                    advancedBoolSetting.option,
+                    enabled
+                )
             }
         }
 
@@ -301,10 +301,14 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             litert_lm_engine_settings_enable_benchmark(settings)
         }
         let advancedLog = Self.advancedBoolSettings
-            .map { "\($0.environmentKey)=\(environment[$0.environmentKey] ?? "default")" }
+            .map {
+                "\($0.environmentKey)=\(Self.boolSettingLogValue($0.environmentKey, environment: environment, defaultValues: defaultAdvancedBoolValues))"
+            }
             .joined(separator: " ")
         let visionGpuLog = Self.visionGpuBoolSettings
-            .map { "\($0.environmentKey)=\(environment[$0.environmentKey] ?? "default")" }
+            .map {
+                "\($0.environmentKey)=\(Self.boolSettingLogValue($0.environmentKey, environment: environment, defaultValues: defaultVisionGpuBoolValues))"
+            }
             .joined(separator: " ")
         ConsoleLog.debug(
             "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(activationDataType.map(String.init) ?? "default") main_activation_data_type=\(mainActivationDataType.map(String.init) ?? "default") vision_activation_data_type=\(environment["LITERT_LM_VISION_ACTIVATION_DATA_TYPE"] ?? "default") audio_activation_data_type=\(environment["LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(maxNumTokens.map(String.init) ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") prefill_batch_sizes=\(environment["LITERT_LM_PREFILL_BATCH_SIZES"] ?? "default") gpu_external_tensor_mode=\(environment["LITERT_LM_GPU_EXTERNAL_TENSOR_MODE"] ?? "default") gpu_hint_kernel_batch_size=\(environment["LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled") cache_subdirectory=\(environment["LITERT_LM_CACHE_SUBDIRECTORY"] ?? "default") \(advancedLog) \(visionGpuLog).",
@@ -617,6 +621,53 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         ("LITERT_LM_VISION_GPU_CACHE_COMPILED_SHADERS_ONLY", 5),
         ("LITERT_LM_VISION_GPU_SHARE_CONSTANT_TENSORS", 6),
     ]
+
+    private static func defaultAdvancedBoolValues(mainBackendName: String) -> [String: Bool] {
+        guard mainBackendName.lowercased() == "gpu" else { return [:] }
+        return [
+            "LITERT_LM_GPU_CACHE_COMPILED_SHADERS_ONLY": true,
+        ]
+    }
+
+    private static func defaultVisionGpuBoolValues(visionBackendName: String?) -> [String: Bool] {
+        guard visionBackendName?.lowercased() == "gpu" else { return [:] }
+        return [
+            "LITERT_LM_VISION_GPU_CACHE_COMPILED_SHADERS_ONLY": true,
+        ]
+    }
+
+    private static func resolvedBoolSetting(
+        _ environmentKey: String,
+        environment: [String: String],
+        defaultValues: [String: Bool]
+    ) -> Bool? {
+        if let rawValue = environment[environmentKey] {
+            if let enabled = Bool(rawValue) {
+                return enabled
+            }
+            ConsoleLog.error(
+                "Ignoring invalid \(environmentKey)=\(rawValue).",
+                category: "Runtime"
+            )
+            return nil
+        }
+
+        return defaultValues[environmentKey]
+    }
+
+    private static func boolSettingLogValue(
+        _ environmentKey: String,
+        environment: [String: String],
+        defaultValues: [String: Bool]
+    ) -> String {
+        if let rawValue = environment[environmentKey] {
+            return rawValue
+        }
+        if let defaultValue = defaultValues[environmentKey] {
+            return "\(defaultValue)(default)"
+        }
+        return "default"
+    }
 
     private static func runtimeCacheDirectory(baseDirectory: URL, environment: [String: String]) -> URL {
         guard let rawSubdirectory = environment["LITERT_LM_CACHE_SUBDIRECTORY"] else {

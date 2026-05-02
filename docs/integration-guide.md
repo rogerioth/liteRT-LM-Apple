@@ -103,12 +103,18 @@ litert_lm_engine_settings_set_cache_dir(settings, cache_dir);
 litert_lm_engine_settings_set_max_num_images(settings, 1);
 litert_lm_engine_settings_set_main_activation_data_type(settings, 1);  // FLOAT16
 litert_lm_engine_settings_set_max_num_tokens(settings, 384);
+litert_lm_engine_settings_set_advanced_bool(
+    settings, kLiteRtLmAdvancedCacheCompiledShadersOnly, true);
+litert_lm_engine_settings_set_vision_gpu_bool(
+    settings, kLiteRtLmAdvancedCacheCompiledShadersOnly, true);
 litert_lm_engine_settings_enable_benchmark(settings);
 ```
 
 If `vision_backend_str` is left `NULL`, the first image content part will crash inside the runtime (`vision_executor_` is null). If `max_num_images` is left at the default `0`, vision prefill fails with a `DYNAMIC_UPDATE_SLICE` shape mismatch.
 
 Use `"cpu"` for either backend only when you intentionally want a CPU diagnostic path. Avoid setting `prefill_chunk_size` for GPU vision prompts unless you have a specific reason; that override can conflict with the model's baked vision-prefill graph. The sample app caps GPU `max_num_tokens` at `384` because larger budgets can exceed the memory envelope of the current public E4B artifact. The engine handles decode, bicubic resize to the model's baked patch budget, and `[0, 1]` normalization, so callers do not need to preprocess the bitmap beyond providing a decoder-supported image format.
+
+For all-GPU E4B prompts, the sample app also enables `kLiteRtLmAdvancedCacheCompiledShadersOnly` on both the main and vision GPU executors. This avoids the larger cold-cache Metal serialization path that can be killed by iOS memory pressure on first image inference. Explicit DEBUG overrides can still set either option to `false` for diagnostics.
 
 The sample app re-encodes picker output as JPEG before sending it to LiteRT-LM. This is important for HEIC photos from iOS, because the underlying `stb_image` decoder does not support HEIC.
 
@@ -122,6 +128,8 @@ The sample app's `LiteRTLMRuntime` currently applies these defaults when no DEBU
 - `max_num_images`: `1`
 - main activation data type: `1` (`FLOAT16`) for GPU main executor
 - max tokens: `384` for GPU main executor
+- main GPU cache mode: compiled shaders only
+- vision GPU cache mode: compiled shaders only
 - session max output tokens: `256`
 - benchmark collection: enabled
 
