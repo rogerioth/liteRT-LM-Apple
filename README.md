@@ -111,6 +111,8 @@ litert_lm_engine_settings_set_cache_dir(settings, cacheDirectory)
 litert_lm_engine_settings_set_max_num_images(settings, 1)
 litert_lm_engine_settings_set_main_activation_data_type(settings, 1) // FLOAT16
 litert_lm_engine_settings_set_max_num_tokens(settings, 384)
+// E4B all-GPU prompts need the lower-memory CPU weight-conversion path.
+litert_lm_engine_settings_set_advanced_bool(settings, kLiteRtLmAdvancedConvertWeightsOnGpu, false)
 litert_lm_engine_settings_set_advanced_bool(settings, kLiteRtLmAdvancedCacheCompiledShadersOnly, true)
 litert_lm_engine_settings_set_vision_gpu_bool(settings, kLiteRtLmAdvancedCacheCompiledShadersOnly, true)
 litert_lm_engine_settings_enable_benchmark(settings)
@@ -160,6 +162,7 @@ The sample runtime currently chooses this profile by default:
 - `litert_lm_engine_settings_set_max_num_images(settings, 1)`
 - `litert_lm_engine_settings_set_main_activation_data_type(settings, 1)` (`FLOAT16`) for the GPU main executor
 - `litert_lm_engine_settings_set_max_num_tokens(settings, 384)` for the GPU main executor
+- `litert_lm_engine_settings_set_advanced_bool(settings, kLiteRtLmAdvancedConvertWeightsOnGpu, false)` for E4B on the GPU main executor
 - `litert_lm_engine_settings_set_advanced_bool(settings, kLiteRtLmAdvancedCacheCompiledShadersOnly, true)` for the GPU main executor
 - `litert_lm_engine_settings_set_vision_gpu_bool(settings, kLiteRtLmAdvancedCacheCompiledShadersOnly, true)` for the GPU vision executor
 - `litert_lm_session_config_set_max_output_tokens(sessionConfig, 256)`

@@ -238,6 +238,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         }
 
         let defaultAdvancedBoolValues = Self.defaultAdvancedBoolValues(
+            modelURL: modelURL,
             mainBackendName: normalizedBackendName
         )
         for advancedBoolSetting in Self.advancedBoolSettings {
@@ -622,11 +623,15 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         ("LITERT_LM_VISION_GPU_SHARE_CONSTANT_TENSORS", 6),
     ]
 
-    private static func defaultAdvancedBoolValues(mainBackendName: String) -> [String: Bool] {
+    private static func defaultAdvancedBoolValues(modelURL: URL, mainBackendName: String) -> [String: Bool] {
         guard mainBackendName.lowercased() == "gpu" else { return [:] }
-        return [
+        var values = [
             "LITERT_LM_GPU_CACHE_COMPILED_SHADERS_ONLY": true,
         ]
+        if modelURL.lastPathComponent.lowercased().contains("e4b") {
+            values["LITERT_LM_GPU_CONVERT_WEIGHTS_ON_GPU"] = false
+        }
+        return values
     }
 
     private static func defaultVisionGpuBoolValues(visionBackendName: String?) -> [String: Bool] {

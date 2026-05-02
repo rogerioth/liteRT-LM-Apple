@@ -42,6 +42,7 @@ These models are pinned in `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/M
 - max images: `1`
 - main activation data type: `1` (`FLOAT16`) for GPU main executor
 - max tokens: `384` for GPU main executor
+- E4B main GPU weight conversion: CPU-side conversion
 - main GPU cache mode: compiled shaders only
 - vision GPU cache mode: compiled shaders only
 - session max output tokens: `256`

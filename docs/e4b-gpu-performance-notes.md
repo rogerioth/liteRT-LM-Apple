@@ -21,6 +21,7 @@ vision_backend=gpu when an image is attached
 main_activation_data_type=FLOAT16
 max_num_tokens=384
 max_output_tokens=256
+gpu_convert_weights_on_gpu=false
 gpu_cache_compiled_shaders_only=true
 vision_gpu_cache_compiled_shaders_only=true
 benchmark=enabled
@@ -33,7 +34,7 @@ Representative app log:
 ```text
 Created engine settings backend=gpu backend_source=default vision_backend=gpu vision_backend_source=default.
 TIMING runtime phase=engine_settings_configure ... backend=gpu vision_backend=gpu max_num_tokens=384 benchmark=enabled.
-Applied engine settings ... LITERT_LM_GPU_CACHE_COMPILED_SHADERS_ONLY=true(default) ... LITERT_LM_VISION_GPU_CACHE_COMPILED_SHADERS_ONLY=true(default).
+Applied engine settings ... LITERT_LM_GPU_CONVERT_WEIGHTS_ON_GPU=false(default) ... LITERT_LM_GPU_CACHE_COMPILED_SHADERS_ONLY=true(default) ... LITERT_LM_VISION_GPU_CACHE_COMPILED_SHADERS_ONLY=true(default).
 ```
 
 Observed successful smoke tests:
@@ -42,7 +43,7 @@ Observed successful smoke tests:
 - E4B + PNG on iPhone 16 Pro Max: passed with `backend=gpu`, `vision_backend=gpu`.
 - E2B + JPG regression: passed with `backend=gpu`, `vision_backend=gpu`.
 - A no-env E4B smoke run on iPhone 16 Pro Max completed in `24.831s` total with `conversation_send_and_parse=16.779s`; LiteRT benchmark reported `init=15.59s`, `ttft=5.42s`, `prefill=286t/53.63tps/5.33s`, and `decode=98t/11.04tps/8.88s`.
-- On iPhone 17 Pro Max, a cold cache using full serialized GPU artifacts was killed by iOS with signal 9 immediately after `message_json_encode` at about `3104 MB` process physical footprint. Rerunning the same cache passed, which showed the failure was the cold-cache GPU artifact path rather than steady-state inference. A fresh cache with compiled-shaders-only enabled for both main and vision GPU passed on the first run in `11.587s` total, with `conversation_send_and_parse=5.629s`. After making that setting the default, a fresh-cache no-env verification passed in `15.955s` total.
+- On iPhone 17 Pro Max, a cold cache using full serialized GPU artifacts was killed by iOS with signal 9 immediately after `message_json_encode` at about `3104 MB` process physical footprint. Rerunning the same cache passed, which showed the failure was the cold-cache GPU artifact path rather than steady-state inference. A fresh cache with compiled-shaders-only enabled for both main and vision GPU passed on the first run in `11.587s` total, with `conversation_send_and_parse=5.629s`. After making that setting the default, a UI-path run still crashed at about `3112 MB`, so the current E4B default also sets main `convert_weights_on_gpu=false`. With that setting, an iPhone 17 Pro Max fresh-cache smoke run passed with pre-`send_message` footprint about `2899 MB`, `conversation_send_and_parse=5.931s`, and total runtime `21.583s`.
 
 ## Why the sample app can still be slower than Edge Gallery
 
@@ -162,7 +163,7 @@ Historical main-GPU outcomes before the release-vision-resources fix:
 - `main_activation_data_type=FLOAT16 max_tokens=512 max_num_images=1 vision_gpu_madvise_original_shared_tensors=false`: still failed allocating Metal textures.
 - `main_activation_data_type=FLOAT16 vision_activation_data_type=FLOAT16 max_tokens=512 max_num_images=1`: still failed allocating Metal textures.
 
-These failures happened before prompt-size or image-size choices could matter. The later release-vision-resources fix changed the all-GPU outcome for smaller GPU token budgets, and the current sample default uses `main_activation_data_type=FLOAT16`, `max_num_tokens=384`, and compiled-shaders-only cache mode for both GPU executors.
+These failures happened before prompt-size or image-size choices could matter. The later release-vision-resources fix changed the all-GPU outcome for smaller GPU token budgets, and the current sample default uses `main_activation_data_type=FLOAT16`, `max_num_tokens=384`, CPU-side main GPU weight conversion for E4B, and compiled-shaders-only cache mode for both GPU executors.
 
 Two external signals are worth keeping with the local evidence:
 
