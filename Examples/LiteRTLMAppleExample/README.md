@@ -4,7 +4,7 @@ This example app shows the intended integration path for this repository:
 
 - fetch `LiteRTLMApple` from GitHub through Swift Package Manager
 - download a pinned `.litertlm` model into local app storage
-- initialize LiteRT-LM with a cache directory
+- initialize LiteRT-LM with a cache directory and the sample's default GPU runtime profile
 - run single-turn inference from SwiftUI
 - exercise the same flow on iPhone, iPad, Apple Vision Pro, or Mac
 
@@ -33,7 +33,11 @@ The current checked-in iOS simulator, visionOS simulator, and Catalyst artifacts
 - model storage under Application Support
 - cache storage under Caches
 - a small Swift wrapper around the C conversation API
+- default `gpu` main backend and `gpu` vision backend for image prompts
+- benchmark display for initialization, time to first token, prefill, and decode
 - structured `print` logging for downloads, runtime setup, inference, and errors in the Xcode console
+
+The DEBUG build also includes a smoke-test entrypoint for `devicectl` runs. Its `LITERT_LM_*` environment variables are diagnostics only; normal app launches use the defaults in `LiteRTLMRuntime.swift`.
 
 ## Changing The Models
 

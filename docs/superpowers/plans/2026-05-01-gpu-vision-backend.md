@@ -1,5 +1,7 @@
 # GPU Vision Backend Implementation Plan
 
+> Historical implementation note: this plan records the GPU packaging work as it was designed in May 2026 and is not the current API reference. For current method names, parameters, sample defaults, and troubleshooting guidance, use `README.md`, `docs/integration-guide.md`, `docs/sample-app.md`, and `docs/troubleshooting.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship one LiteRT-LM Apple engine binary that keeps CPU execution working and can also register the GPU/Metal vision backend on iOS.

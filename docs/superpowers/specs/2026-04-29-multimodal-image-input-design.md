@@ -1,5 +1,7 @@
 # Multimodal Image Input — Design
 
+> Historical design note: this document records the April 2026 design and may contain API snippets and runtime settings that have since changed. For current method names, parameters, sample defaults, and troubleshooting guidance, use `README.md`, `docs/integration-guide.md`, `docs/sample-app.md`, and `docs/troubleshooting.md`.
+
 **Date:** 2026-04-29
 **Status:** Approved for implementation
 **Repo:** `liteRT-LM-Apple`

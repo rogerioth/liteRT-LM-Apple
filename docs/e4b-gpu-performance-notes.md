@@ -16,34 +16,45 @@ This note captures the May 2026 iPhone comparison between this sample app and Go
 The sample app currently runs E4B as:
 
 ```text
-backend=cpu vision_backend=gpu
-cpu_kernel_mode=builtin
+backend=gpu
+vision_backend=gpu when an image is attached
+main_activation_data_type=FLOAT16
+max_num_tokens=384
+max_output_tokens=256
+benchmark=enabled
 ```
 
-This is a correctness workaround, not a performance-equivalent configuration. It keeps the vision encoder on GPU, but the main language model prefill/decode path runs on LiteRT built-in CPU kernels. That avoids the E4B + vision-GPU XNNPack reshape failure, but it makes inference take minutes.
+This is now the normal sample-app path; no `LITERT_LM_*` environment variables are required for a regular launch to choose GPU/GPU. DEBUG builds still accept those variables as diagnostic overrides.
 
 Representative app log:
 
 ```text
-Created engine settings backend=cpu vision_backend=gpu.
-Applied engine settings: max_num_images=1 activation_data_type=default max_num_tokens=default prefill_chunk_size=default cpu_kernel_mode=builtin parallel_loading=default benchmark=disabled.
+Created engine settings backend=gpu backend_source=default vision_backend=gpu vision_backend_source=default.
+TIMING runtime phase=engine_settings_configure ... backend=gpu vision_backend=gpu max_num_tokens=384 benchmark=enabled.
 ```
 
 Observed successful smoke tests:
 
-- E4B + JPG on iPhone 16 Pro Max: passed with `vision_backend=gpu`, `cpu_kernel_mode=builtin`.
-- E4B + PNG on iPhone 16 Pro Max: passed with `vision_backend=gpu`, `cpu_kernel_mode=builtin`.
-- E2B + JPG regression: passed with `vision_backend=gpu`, `cpu_kernel_mode=default`.
+- E4B + JPG on iPhone 16 Pro Max: passed with default `backend=gpu`, `vision_backend=gpu`.
+- E4B + PNG on iPhone 16 Pro Max: passed with `backend=gpu`, `vision_backend=gpu`.
+- E2B + JPG regression: passed with `backend=gpu`, `vision_backend=gpu`.
+- A no-env E4B smoke run on iPhone 16 Pro Max completed in `24.831s` total with `conversation_send_and_parse=16.779s`; LiteRT benchmark reported `init=15.59s`, `ttft=5.42s`, `prefill=286t/53.63tps/5.33s`, and `decode=98t/11.04tps/8.88s`.
 
-## Why the sample app is slow
+## Why the sample app can still be slower than Edge Gallery
 
-The slow path is expected from the current workaround. The model no longer crashes, but the main executor is CPU-only and uses built-in kernels, which are much slower than the GPU executor.
+The old minutes-long path was caused by CPU fallback in the sample app runtime defaults. That fallback is no longer the default. If a current build takes minutes, check the runtime log line that starts with `Created engine settings`; it should show `backend=gpu backend_source=default vision_backend=gpu vision_backend_source=default` for image prompts.
 
-Earlier attempts showed:
+The remaining performance gap versus Edge Gallery is from other factors:
+
+- the public Hugging Face E4B artifact exposes different main signatures (`prefill_1024`, `prefill_128`, `decode`, `verify`) than the observed Edge Gallery artifact (`prefill_16`, `prefill_256`, `decode`, `verify`);
+- the checked-in package does not currently bundle the optional Metal/WebGPU top-k sampler dylibs, so sampling falls back to CPU even when main and vision executors use GPU;
+- the public artifact still has a larger eager GPU compilation and memory footprint than the observed Edge Gallery path.
+
+Earlier attempts before the release-vision-resources fix showed:
 
 - `backend=cpu vision_backend=gpu` with default XNNPack CPU kernels reaches prefill, then fails with XNNPack reshape errors.
-- `backend=gpu vision_backend=gpu` with the current sample app/runtime/model path failed with memory mapping / allocation issues on device.
-- The current fallback changes only E4B + main CPU + vision GPU to `cpu_kernel_mode=builtin` so the path is correct but slow.
+- `backend=cpu vision_backend=gpu cpu_kernel_mode=builtin` completed but was slow because main prefill/decode ran on CPU.
+- `backend=gpu vision_backend=gpu` with large token budgets failed with memory mapping / allocation issues on device.
 
 ## Google AI Edge Gallery comparison
 
@@ -125,7 +136,7 @@ main section signatures: decode, prefill_16, prefill_256, verify
 no tf_lite_mtp_drafter section observed
 ```
 
-Observed main-GPU outcomes:
+Historical main-GPU outcomes before the release-vision-resources fix:
 
 - `backend=gpu vision_backend=gpu max_tokens=4000 max_num_images=10`: failed during main GPU `CompiledModel::Create` with `Failed to allocate id<MTLTexture>`.
 - After exposing the remaining upstream GPU diagnostics, the iPhone 16 Pro Max baseline still failed in the same phase. It initialized `decode` and `prefill_1024` from serialized GPU data, then failed allocating a Metal texture while preparing the `prefill_128` signature. This confirms the failure is in eager main-model GPU signature compilation, before image-specific vision inference.
@@ -147,7 +158,7 @@ Observed main-GPU outcomes:
 - `main_activation_data_type=FLOAT16 max_tokens=512 max_num_images=1 vision_gpu_madvise_original_shared_tensors=false`: still failed allocating Metal textures.
 - `main_activation_data_type=FLOAT16 vision_activation_data_type=FLOAT16 max_tokens=512 max_num_images=1`: still failed allocating Metal textures.
 
-These failures happen before prompt-size or image-size choices can matter. The public artifact's all-GPU memory footprint is too high for this runtime/device combination even when the runtime settings are made smaller than Edge Gallery's.
+These failures happened before prompt-size or image-size choices could matter. The later release-vision-resources fix changed the all-GPU outcome for smaller GPU token budgets, and the current sample default uses `main_activation_data_type=FLOAT16` plus `max_num_tokens=384`.
 
 Two external signals are worth keeping with the local evidence:
 
@@ -164,7 +175,7 @@ The performance gap is not primarily an image-size issue. Edge Gallery is fast b
 - Parallel section loading.
 - A different Google-hosted E4B model artifact than the sample app's Hugging Face artifact.
 
-As of 2026-05-02, E4B can complete with both `LITERT_LM_BACKEND=gpu` and `LITERT_LM_VISION_BACKEND=gpu` on the iPhone 16 Pro Max. The decisive fix was to release the compiled vision executor resources after image encoding and before LLM prefill. Before that release, the process reached the first `prefill_128` per-layer embedding lookup and was killed by iOS. After the release, the same public Hugging Face E4B artifact completes all three prefill chunks.
+As of 2026-05-02, E4B can complete with main `gpu` and vision `gpu` on the iPhone 16 Pro Max. The sample app now uses that path by default for image prompts. The decisive native fix was to release the compiled vision executor resources after image encoding and before LLM prefill. Before that release, the process reached the first `prefill_128` per-layer embedding lookup and was killed by iOS. After the release, the same public Hugging Face E4B artifact completes all three prefill chunks.
 
 This fixes correctness for all-GPU E4B on device, but it still does not make the public artifact match Edge Gallery's startup/perceived performance. Edge Gallery appears to use a different Google-hosted model artifact with different main signatures and no visible CPU MTP drafter path, while the public artifact still exposes `prefill_1024`, `prefill_128`, `decode`, and `verify`.
 
@@ -190,6 +201,11 @@ The local package now exposes `LITERT_LM_PREFILL_BATCH_SIZES` for diagnostics an
 The local package also exposes these diagnostic switches so future test runs can isolate upstream LiteRT GPU behavior without rebuilding:
 
 ```text
+LITERT_LM_BACKEND
+LITERT_LM_VISION_BACKEND
+LITERT_LM_MAX_NUM_TOKENS
+LITERT_LM_MAX_NUM_IMAGES
+LITERT_LM_BENCHMARK
 LITERT_LM_CACHE_SUBDIRECTORY
 LITERT_LM_MAIN_ACTIVATION_DATA_TYPE
 LITERT_LM_VISION_ACTIVATION_DATA_TYPE

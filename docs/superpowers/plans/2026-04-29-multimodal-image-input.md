@@ -1,5 +1,7 @@
 # Multimodal Image Input — Implementation Plan
 
+> Historical implementation note: this plan records work as it was designed in April 2026 and is not the current API reference. For current method names, parameters, sample defaults, and troubleshooting guidance, use `README.md`, `docs/integration-guide.md`, `docs/sample-app.md`, and `docs/troubleshooting.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Bump the LiteRT-LM upstream pin to current `main` HEAD, refresh the package's patches and XCFrameworks for the renamed C API, and add a working text + image input flow to the sample app so a user on iPhone, iPad, Apple Vision Pro, native Mac, or Mac Catalyst can attach a photo and ask Gemma 4 E2B about it.
@@ -1411,7 +1413,7 @@ Append:
 - "Model says it cannot see images" or returns generic text when an image is attached: check that `litert_lm_engine_settings_set_max_num_images` was called with a value of at least `1` before `litert_lm_engine_create`.
 - HEIC photos from the iOS Photos library: re-encode to JPEG (or PNG) before sending. The sample app does this via `ImageDataNormalizer`. The engine's stb_image-based decoder does not support HEIC.
 - `DYNAMIC_UPDATE_SLICE` shape mismatch on iOS device prefill: same root cause as above — `max_num_images` left at the default `0`.
-- Crash during E4B vision prefill on Apple Silicon: track upstream issue #1933. As a workaround, use Gemma 4 E2B for image testing.
+- Historical note: older E4B vision-prefill builds crashed on Apple Silicon. Current user-facing guidance lives in `docs/troubleshooting.md`; the sample app now uses a GPU/GPU profile with the release-vision-resources native patch.
 ```
 
 - [ ] **Step 12.6: Update `docs/maintenance-guide.md` with the new pin**

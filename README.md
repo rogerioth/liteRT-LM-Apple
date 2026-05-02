@@ -24,7 +24,7 @@ This repo is designed to let you answer "yes" to all three.
 ## What You Get
 
 - a Swift package product named `LiteRTLMApple`
-- prebuilt `LiteRTLMEngineCPU.xcframework` and `GemmaModelConstraintProvider.xcframework`
+- prebuilt `LiteRTLMEngineCPU.xcframework`, `LiteRtMetalAccelerator.xcframework`, and `GemmaModelConstraintProvider.xcframework`
 - direct access to the upstream `engine.h` C API from Swift and Objective-C
 - official package support for iOS, visionOS, Apple Silicon macOS, and Apple Silicon Mac Catalyst
 - a complete SwiftUI sample app for local model download and single-turn inference on iPhone, iPad, Apple Vision Pro, native Mac, and Mac Catalyst
@@ -102,10 +102,16 @@ Here is a minimal single-turn flow from Swift:
 import Foundation
 import LiteRTLMApple
 
-// Pass "cpu" for vision_backend_str if you plan to send images.
-let settings = litert_lm_engine_settings_create(modelPath, "cpu", "cpu", nil)
+// The sample app's current default profile uses GPU for the main executor and
+// GPU for the vision encoder when an image is attached. Use "cpu" for either
+// backend if you intentionally want a CPU diagnostic path.
+let settings = litert_lm_engine_settings_create(modelPath, "gpu", "gpu", nil)
+litert_lm_engine_settings_set_runtime_library_dir(settings, runtimeLibraryDirectory)
 litert_lm_engine_settings_set_cache_dir(settings, cacheDirectory)
 litert_lm_engine_settings_set_max_num_images(settings, 1)
+litert_lm_engine_settings_set_main_activation_data_type(settings, 1) // FLOAT16
+litert_lm_engine_settings_set_max_num_tokens(settings, 384)
+litert_lm_engine_settings_enable_benchmark(settings)
 
 let engine = litert_lm_engine_create(settings)
 
@@ -145,6 +151,18 @@ The current sample app includes pinned Gemma 4 examples:
 
 That makes this repository a useful starting point if you want to put Gemma 4 directly on Apple hardware instead of routing inference through a server.
 
+The sample runtime currently chooses this profile by default:
+
+- main executor: `gpu`
+- vision backend: `gpu` when an image is attached, `none` for text-only prompts unless overridden
+- `litert_lm_engine_settings_set_max_num_images(settings, 1)`
+- `litert_lm_engine_settings_set_main_activation_data_type(settings, 1)` (`FLOAT16`) for the GPU main executor
+- `litert_lm_engine_settings_set_max_num_tokens(settings, 384)` for the GPU main executor
+- `litert_lm_session_config_set_max_output_tokens(sessionConfig, 256)`
+- `litert_lm_engine_settings_enable_benchmark(settings)`
+
+The DEBUG sample still accepts `LITERT_LM_*` environment variables for device diagnostics, but regular app launches do not need those variables to use the GPU/GPU path.
+
 Open it here:
 
 ```text
@@ -168,12 +186,13 @@ The Conversation API on the C surface accepts user messages with mixed image and
 ]}
 ```
 
-Two settings must be in place before creating the engine on a vision-capable model:
+These settings must be in place before creating the engine on a vision-capable model:
 
 1. Pass `"cpu"` (or `"gpu"`) for `vision_backend_str` in `litert_lm_engine_settings_create` — passing `NULL` skips vision-executor instantiation and the first image content part will crash.
 2. Call `litert_lm_engine_settings_set_max_num_images(settings, 1)` (or higher). The default of `0` causes the prefill graph to fail with a `DYNAMIC_UPDATE_SLICE` shape mismatch.
+3. If you use the sample app's E4B GPU profile, set the main activation type to `FLOAT16` (`1`) and cap `max_num_tokens` to `384`. Higher GPU token budgets can exceed device memory on current public E4B artifacts.
 
-Leave `max_num_tokens` and `prefill_chunk_size` at their model-driven defaults for vision prompts; explicit overrides can conflict with the baked vision-prefill graph.
+Leave `prefill_chunk_size` at its model-driven default for GPU vision prompts. On CPU diagnostic paths, avoid overriding `max_num_tokens` or `prefill_chunk_size` unless you know the model artifact supports the requested shape.
 
 ## Screenshots
 
@@ -226,6 +245,7 @@ That script orchestrates the internal subscripts and runs the full pipeline:
 Updated outputs land in:
 
 - `Artifacts/LiteRTLMEngineCPU.xcframework`
+- `Artifacts/LiteRtMetalAccelerator.xcframework`
 - `Artifacts/GemmaModelConstraintProvider.xcframework`
 - `Sources/LiteRTLMApple/include/engine.h`
 
