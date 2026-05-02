@@ -117,9 +117,18 @@ index aa1eec8b..7c2a6ec4 100644
  // in parallel. Defaults to true.
  //
 diff --git a/runtime/core/engine_advanced_impl.cc b/runtime/core/engine_advanced_impl.cc
-index 60def743..6f9abbe5 100644
+index 60def743..de5cd8ea 100644
 --- a/runtime/core/engine_advanced_impl.cc
 +++ b/runtime/core/engine_advanced_impl.cc
+@@ -77,7 +77,7 @@ absl::StatusOr<Environment&> GetEnvironment(EngineSettings& engine_settings,
+         if (auto severity = GetMinLogSeverity()) {
+           env_options.push_back(::litert::EnvironmentOptions::Option{
+               ::litert::EnvironmentOptions::Tag::kMinLoggerSeverity,
+-              ToLiteRtLogSeverityInt8(*severity)});
++              static_cast<int64_t>(ToLiteRtLogSeverityInt8(*severity))});
+         }
+         const auto& main_executor_settings =
+             engine_settings.GetMainExecutorSettings();
 @@ -88,8 +88,19 @@ absl::StatusOr<Environment&> GetEnvironment(EngineSettings& engine_settings,
                     .GetAdvancedSettings() ||  // Default is true.
                main_executor_settings.GetAdvancedSettings()
@@ -143,9 +152,18 @@ index 60def743..6f9abbe5 100644
          } else {
  #if defined(LITERT_DISABLE_NPU)
 diff --git a/runtime/core/engine_impl.cc b/runtime/core/engine_impl.cc
-index 3921482d..fda4ed3e 100644
+index 3921482d..3c3efa89 100644
 --- a/runtime/core/engine_impl.cc
 +++ b/runtime/core/engine_impl.cc
+@@ -76,7 +76,7 @@ absl::StatusOr<Environment&> GetEnvironment(EngineSettings& engine_settings,
+         if (auto severity = GetMinLogSeverity()) {
+           env_options.push_back(::litert::EnvironmentOptions::Option{
+               ::litert::EnvironmentOptions::Tag::kMinLoggerSeverity,
+-              ToLiteRtLogSeverityInt8(*severity)});
++              static_cast<int64_t>(ToLiteRtLogSeverityInt8(*severity))});
+         }
+         const auto& main_executor_settings =
+             engine_settings.GetMainExecutorSettings();
 @@ -87,8 +87,19 @@ absl::StatusOr<Environment&> GetEnvironment(EngineSettings& engine_settings,
                     .GetAdvancedSettings() ||  // Default is true.
                main_executor_settings.GetAdvancedSettings()
