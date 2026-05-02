@@ -74,14 +74,14 @@ retag_build_version() {
 }
 
 pushd "${upstream_dir}" >/dev/null
-bazelisk build --config=ios_arm64 //c:engine_cpu_shared
-bazelisk build --config=ios_sim_arm64 //c:engine_cpu_shared
-bazelisk build --config=macos --config=macos_arm64 //c:engine_cpu_shared
+bazelisk build --config=ios_arm64 //c:engine_shared
+bazelisk build --config=ios_sim_arm64 //c:engine_shared
+bazelisk build --config=macos --config=macos_arm64 //c:engine_shared
 popd >/dev/null
 
-device_engine_input="${upstream_dir}/bazel-out/ios_arm64-opt/bin/c/libengine_cpu_shared.dylib"
-sim_engine_input="${upstream_dir}/bazel-out/ios_sim_arm64-opt/bin/c/libengine_cpu_shared.dylib"
-mac_engine_input="${upstream_dir}/bazel-out/darwin_arm64-opt/bin/c/libengine_cpu_shared.dylib"
+device_engine_input="${upstream_dir}/bazel-out/ios_arm64-opt/bin/c/libengine_shared.dylib"
+sim_engine_input="${upstream_dir}/bazel-out/ios_sim_arm64-opt/bin/c/libengine_shared.dylib"
+mac_engine_input="${upstream_dir}/bazel-out/darwin_arm64-opt/bin/c/libengine_shared.dylib"
 device_constraint_input="${upstream_dir}/prebuilt/ios_arm64/libGemmaModelConstraintProvider.dylib"
 sim_constraint_input="${upstream_dir}/prebuilt/ios_sim_arm64/libGemmaModelConstraintProvider.dylib"
 mac_constraint_input="${upstream_dir}/prebuilt/macos_arm64/libGemmaModelConstraintProvider.dylib"

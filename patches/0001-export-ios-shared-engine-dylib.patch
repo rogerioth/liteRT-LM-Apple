@@ -7,7 +7,7 @@ index 4e157c2f..5ec6a371 100644
  )
  
 +cc_binary(
-+    name = "engine_cpu_shared",
++    name = "engine_shared",
 +    linkshared = 1,
 +    linkstatic = 1,
 +    linkopts = select({
@@ -20,7 +20,7 @@ index 4e157c2f..5ec6a371 100644
 +        "//conditions:default": [],
 +    }),
 +    deps = [
-+        ":engine_cpu",
++        ":engine",
 +    ],
 +)
 +
