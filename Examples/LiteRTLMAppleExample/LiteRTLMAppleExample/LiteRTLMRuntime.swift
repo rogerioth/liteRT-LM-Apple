@@ -4,6 +4,8 @@ import LiteRTLMApple
 struct InferenceBenchmark: Sendable {
     let initializationSeconds: Double
     let timeToFirstTokenSeconds: Double
+    let prefillTurns: [InferenceBenchmarkTurn]
+    let decodeTurns: [InferenceBenchmarkTurn]
 
     var initializationDescription: String {
         String(format: "%.2fs", initializationSeconds)
@@ -11,6 +13,42 @@ struct InferenceBenchmark: Sendable {
 
     var timeToFirstTokenDescription: String {
         String(format: "%.2fs", timeToFirstTokenSeconds)
+    }
+
+    var prefillDescription: String {
+        Self.turnsDescription(prefillTurns)
+    }
+
+    var decodeDescription: String {
+        Self.turnsDescription(decodeTurns)
+    }
+
+    private static func turnsDescription(_ turns: [InferenceBenchmarkTurn]) -> String {
+        guard !turns.isEmpty else { return "none" }
+        return turns.enumerated()
+            .map { index, turn in
+                "turn\(index)=\(turn.tokenCount)t/\(turn.tokensPerSecondDescription)/\(turn.durationDescription)"
+            }
+            .joined(separator: ",")
+    }
+}
+
+struct InferenceBenchmarkTurn: Sendable {
+    let tokenCount: Int
+    let tokensPerSecond: Double
+
+    var durationSeconds: Double? {
+        guard tokensPerSecond > 0 else { return nil }
+        return Double(tokenCount) / tokensPerSecond
+    }
+
+    var tokensPerSecondDescription: String {
+        String(format: "%.2ftps", tokensPerSecond)
+    }
+
+    var durationDescription: String {
+        guard let durationSeconds else { return "n/a" }
+        return String(format: "%.2fs", durationSeconds)
     }
 }
 
@@ -42,11 +80,13 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             "Queueing inference task. model=\(modelURL.path) cache=\(cacheDirectory.path) prompt_chars=\(inputs.prompt.count) image_bytes=\(inputs.imageData?.count ?? 0).",
             category: "Runtime"
         )
+        let queuedAt = ProcessInfo.processInfo.systemUptime
         return try await Task.detached(priority: .userInitiated) {
             try generateResponseSynchronously(
                 modelURL: modelURL,
                 cacheDirectory: cacheDirectory,
-                inputs: inputs
+                inputs: inputs,
+                queuedAt: queuedAt
             )
         }.value
     }
@@ -54,8 +94,19 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
     private func generateResponseSynchronously(
         modelURL: URL,
         cacheDirectory: URL,
-        inputs: InferenceInputs
+        inputs: InferenceInputs,
+        queuedAt: TimeInterval? = nil
     ) throws -> InferenceResult {
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        if let queuedAt {
+            PhaseTiming.log(
+                "runtime",
+                phase: "task_queue_wait",
+                elapsed: startedAt - queuedAt,
+                category: "Runtime"
+            )
+        }
+        var timing = PhaseTiming("runtime", category: "Runtime", startedAt: startedAt)
         ConsoleLog.info(
             "Starting synchronous inference. model=\(modelURL.path) cache=\(cacheDirectory.path) image_attached=\(inputs.imageData != nil).",
             category: "Runtime"
@@ -79,6 +130,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             "Ensured runtime cache directory exists at \(runtimeCacheDirectory.path).",
             category: "Runtime"
         )
+        timing.mark("cache_prepare")
 
         let backendName = environment["LITERT_LM_BACKEND"] ?? "cpu"
         let normalizedBackendName = backendName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -117,6 +169,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             "Created engine settings backend=\(backendName) vision_backend=\(usesVisionBackend ? normalizedVisionBackendName : "none").",
             category: "Runtime"
         )
+        timing.mark("engine_settings_create")
 
         let runtimeLibraryDirectory = Self.runtimeLibraryDirectory()
         runtimeLibraryDirectory.path.withCString { runtimeLibraryDirectoryPointer in
@@ -246,18 +299,21 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             litert_lm_engine_settings_set_cache_dir(settings, cachePointer)
         }
         ConsoleLog.debug("Configured engine cache directory=\(runtimeCacheDirectory.path).", category: "Runtime")
+        timing.mark("engine_settings_configure", metadata: "benchmark=\(benchmarkEnabled ? "enabled" : "disabled")")
 
         guard let engine = litert_lm_engine_create(settings) else {
             throw LiteRTLMRuntimeError("Failed to create LiteRT-LM engine.")
         }
         defer { litert_lm_engine_delete(engine) }
         ConsoleLog.info("Created LiteRT-LM engine.", category: "Runtime")
+        timing.mark("engine_create")
 
         guard let sessionConfig = litert_lm_session_config_create() else {
             throw LiteRTLMRuntimeError("Failed to create LiteRT-LM session config.")
         }
         defer { litert_lm_session_config_delete(sessionConfig) }
         ConsoleLog.info("Created session config.", category: "Runtime")
+        timing.mark("session_config_create")
 
         litert_lm_session_config_set_max_output_tokens(sessionConfig, 256)
         ConsoleLog.debug("Configured session max_output_tokens=256.", category: "Runtime")
@@ -275,20 +331,24 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             litert_lm_conversation_config_set_system_message(conversationConfig, pointer)
         }
         ConsoleLog.info("Configured conversation config (session + system message).", category: "Runtime")
+        timing.mark("conversation_configure")
 
         guard let conversation = litert_lm_conversation_create(engine, conversationConfig) else {
             throw LiteRTLMRuntimeError("Failed to create LiteRT-LM conversation.")
         }
         defer { litert_lm_conversation_delete(conversation) }
         ConsoleLog.info("Created LiteRT-LM conversation.", category: "Runtime")
+        timing.mark("conversation_create")
 
         let messageJSON = try Self.makeUserMessageJSON(inputs: inputs)
         let extraContextJSON = #"{"enable_thinking":false}"#
         ConsoleLog.debug("Message JSON=\(ConsoleLog.preview(messageJSON, limit: 200)).", category: "Runtime")
         ConsoleLog.debug("Extra context JSON=\(extraContextJSON).", category: "Runtime")
+        timing.mark("message_json_encode", metadata: "json_chars=\(messageJSON.count)")
 
         let generatedText = try messageJSON.withCString { messagePointer -> String in
             try extraContextJSON.withCString { extraContextPointer -> String in
+                let sendStartedAt = ProcessInfo.processInfo.systemUptime
                 guard let response = litert_lm_conversation_send_message(
                     conversation,
                     messagePointer,
@@ -297,7 +357,14 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
                     throw LiteRTLMRuntimeError("LiteRT-LM returned no response object.")
                 }
                 defer { litert_lm_json_response_delete(response) }
+                PhaseTiming.log(
+                    "runtime",
+                    phase: "conversation_send_message",
+                    elapsed: ProcessInfo.processInfo.systemUptime - sendStartedAt,
+                    category: "Runtime"
+                )
 
+                let parseStartedAt = ProcessInfo.processInfo.systemUptime
                 guard let responsePointer = litert_lm_json_response_get_string(response) else {
                     throw LiteRTLMRuntimeError("LiteRT-LM returned an empty response pointer.")
                 }
@@ -307,9 +374,18 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
                     "Raw response JSON=\(ConsoleLog.preview(rawJSON, limit: 400)).",
                     category: "Runtime"
                 )
-                return try Self.extractText(fromConversationResponseJSON: rawJSON)
+                let extractedText = try Self.extractText(fromConversationResponseJSON: rawJSON)
+                PhaseTiming.log(
+                    "runtime",
+                    phase: "response_parse",
+                    elapsed: ProcessInfo.processInfo.systemUptime - parseStartedAt,
+                    category: "Runtime",
+                    metadata: "raw_json_chars=\(rawJSON.count) response_chars=\(extractedText.count)"
+                )
+                return extractedText
             }
         }
+        timing.mark("conversation_send_and_parse", metadata: "response_chars=\(generatedText.count)")
         ConsoleLog.info(
             "Extracted response text (\(generatedText.count) chars). preview=\(ConsoleLog.preview(generatedText)).",
             category: "Runtime"
@@ -318,13 +394,29 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         let benchmark: InferenceBenchmark?
         if let benchmarkInfo = litert_lm_conversation_get_benchmark_info(conversation) {
             defer { litert_lm_benchmark_info_delete(benchmarkInfo) }
+            let prefillTurnCount = max(0, Int(litert_lm_benchmark_info_get_num_prefill_turns(benchmarkInfo)))
+            let prefillTurns = (0..<prefillTurnCount).map { index in
+                InferenceBenchmarkTurn(
+                    tokenCount: Int(litert_lm_benchmark_info_get_prefill_token_count_at(benchmarkInfo, Int32(index))),
+                    tokensPerSecond: litert_lm_benchmark_info_get_prefill_tokens_per_sec_at(benchmarkInfo, Int32(index))
+                )
+            }
+            let decodeTurnCount = max(0, Int(litert_lm_benchmark_info_get_num_decode_turns(benchmarkInfo)))
+            let decodeTurns = (0..<decodeTurnCount).map { index in
+                InferenceBenchmarkTurn(
+                    tokenCount: Int(litert_lm_benchmark_info_get_decode_token_count_at(benchmarkInfo, Int32(index))),
+                    tokensPerSecond: litert_lm_benchmark_info_get_decode_tokens_per_sec_at(benchmarkInfo, Int32(index))
+                )
+            }
             benchmark = InferenceBenchmark(
                 initializationSeconds: litert_lm_benchmark_info_get_total_init_time_in_second(benchmarkInfo),
-                timeToFirstTokenSeconds: litert_lm_benchmark_info_get_time_to_first_token(benchmarkInfo)
+                timeToFirstTokenSeconds: litert_lm_benchmark_info_get_time_to_first_token(benchmarkInfo),
+                prefillTurns: prefillTurns,
+                decodeTurns: decodeTurns
             )
             if let benchmark {
                 ConsoleLog.info(
-                    "Benchmark collected. init=\(benchmark.initializationDescription) ttft=\(benchmark.timeToFirstTokenDescription).",
+                    "Benchmark collected. init=\(benchmark.initializationDescription) ttft=\(benchmark.timeToFirstTokenDescription) prefill=[\(benchmark.prefillDescription)] decode=[\(benchmark.decodeDescription)].",
                     category: "Runtime"
                 )
             }
@@ -332,6 +424,8 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             benchmark = nil
             ConsoleLog.debug("No benchmark info returned by conversation.", category: "Runtime")
         }
+        timing.mark("benchmark_collect")
+        timing.mark("total", metadata: "response_chars=\(generatedText.count)")
 
         return InferenceResult(text: generatedText, benchmark: benchmark)
     }

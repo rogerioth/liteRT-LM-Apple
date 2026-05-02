@@ -17,11 +17,13 @@ enum SmokeTestRunner {
     }
 
     private static func run(arguments: [String]) async -> Int32 {
+        var timing = PhaseTiming("smoke_test", category: "SmokeTest")
         do {
             let model = try modelDescriptor(from: value(after: "--smoke-model", in: arguments))
             let imageURL = try imageURL(from: value(after: "--smoke-image", in: arguments))
             let prompt = value(after: "--smoke-prompt", in: arguments) ?? "What is this?"
             let store = ModelStore()
+            timing.mark("arguments_resolved")
 
             ConsoleLog.info(
                 "SMOKE_TEST starting model=\(model.displayName) image=\(imageURL.path) prompt=\(ConsoleLog.preview(prompt)).",
@@ -31,18 +33,22 @@ enum SmokeTestRunner {
             guard let modelURL = try store.localURLIfPresent(for: model) else {
                 throw SmokeTestError("Missing local model for \(model.displayName). Expected \(store.localURL(for: model).path).")
             }
+            timing.mark("model_lookup", metadata: "model_bytes=\(try fileSize(at: modelURL))")
 
             let rawImageData = try Data(contentsOf: imageURL)
             ConsoleLog.info(
                 "SMOKE_TEST loaded image raw_bytes=\(rawImageData.count).",
                 category: "SmokeTest"
             )
+            timing.mark("image_load", metadata: "raw_bytes=\(rawImageData.count)")
             let normalizedImageData = try ImageDataNormalizer.makeJPEGData(from: rawImageData)
+            timing.mark("image_normalize", metadata: "jpeg_bytes=\(normalizedImageData.count)")
             let result = try await LiteRTLMRuntime().generateResponse(
                 modelURL: modelURL,
                 cacheDirectory: store.cacheDirectory,
                 inputs: InferenceInputs(prompt: prompt, imageData: normalizedImageData)
             )
+            timing.mark("generate_response", metadata: "response_chars=\(result.text.count)")
 
             ConsoleLog.info(
                 "SMOKE_TEST PASS model=\(model.displayName) response_chars=\(result.text.count) response_preview=\(ConsoleLog.preview(result.text)).",
@@ -50,12 +56,14 @@ enum SmokeTestRunner {
             )
             if let benchmark = result.benchmark {
                 ConsoleLog.info(
-                    "SMOKE_TEST benchmark init=\(benchmark.initializationDescription) ttft=\(benchmark.timeToFirstTokenDescription).",
+                    "SMOKE_TEST benchmark init=\(benchmark.initializationDescription) ttft=\(benchmark.timeToFirstTokenDescription) prefill=[\(benchmark.prefillDescription)] decode=[\(benchmark.decodeDescription)].",
                     category: "SmokeTest"
                 )
             }
+            timing.mark("total", metadata: "response_chars=\(result.text.count)")
             return 0
         } catch {
+            timing.mark("failure")
             ConsoleLog.error("SMOKE_TEST FAIL \(describe(error)).", category: "SmokeTest")
             return 1
         }
@@ -115,6 +123,11 @@ enum SmokeTestRunner {
         }
 
         return String(describing: error)
+    }
+
+    private static func fileSize(at url: URL) throws -> UInt64 {
+        let values = try url.resourceValues(forKeys: [.fileSizeKey])
+        return UInt64(values.fileSize ?? 0)
     }
 }
 
