@@ -124,6 +124,13 @@ Observed main-GPU outcomes:
 
 - `backend=gpu vision_backend=gpu max_tokens=4000 max_num_images=10`: failed during main GPU `CompiledModel::Create` with `Failed to allocate id<MTLTexture>`.
 - After exposing the remaining upstream GPU diagnostics, the iPhone 16 Pro Max baseline still failed in the same phase. It initialized `decode` and `prefill_1024` from serialized GPU data, then failed allocating a Metal texture while preparing the `prefill_128` signature. This confirms the failure is in eager main-model GPU signature compilation, before image-specific vision inference.
+- Running with a fresh isolated cache subdirectory produced the same failure, so stale serialized GPU programs are not the root cause.
+- `gpu_convert_weights_on_gpu=false`: main GPU compilation progressed farther, through `prefill_128`, then failed allocating a Metal texture while preparing `verify`.
+- `gpu_share_constant_tensors=false`: worse; the app was killed by signal 9 during the first main-GPU delegate setup.
+- `gpu_external_tensor_mode=true`: failed like baseline at `prefill_128`.
+- `gpu_cache_compiled_shaders_only=true`: changed the initialization path from serialized data to graph, but still failed at `prefill_128`.
+- `main_activation_data_type=FLOAT16`: main GPU setup progressed far enough to reach the vision path. At `max_tokens=4000`, the per-layer embedder mmap failed and vision GPU crashed. At `max_tokens=512`, main and per-layer embedder initialized, then the vision encoder failed allocating Metal textures.
+- `main_activation_data_type=FLOAT16 max_tokens=512 vision_backend=cpu`: the engine was created and image preprocessing reached `RunPrefillAsync`, then the CPU vision encoder failed in XNNPack reshape. This isolates the all-GPU remaining failure to vision encoder Metal allocation after the main model has already consumed memory.
 - `prefill_batch_sizes=16,256`: setting was applied, but LiteRT logged `Too many prefill batch sizes=2 for magic numbers of prefill lengths=0`, kept `prefill_1024` and `prefill_128`, and failed the same way.
 - `activation_data_type=FLOAT16`: main GPU compilation progressed, then the process crashed while bringing up the E4B vision path.
 - `max_tokens=2048 max_num_images=1`: main GPU compiled, but the per-layer embedder mmap failed and the vision encoder failed to allocate Metal textures.
@@ -157,6 +164,7 @@ The local package now exposes `LITERT_LM_PREFILL_BATCH_SIZES` for diagnostics an
 The local package also exposes these diagnostic switches so future test runs can isolate upstream LiteRT GPU behavior without rebuilding:
 
 ```text
+LITERT_LM_CACHE_SUBDIRECTORY
 LITERT_LM_MAIN_ACTIVATION_DATA_TYPE
 LITERT_LM_VISION_ACTIVATION_DATA_TYPE
 LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE
@@ -193,4 +201,13 @@ These files were generated during the investigation and may exist only in the lo
 .worktree/e4b-16pm-main-gpu-vision-gpu-max1024-img1.log
 .worktree/e4b-16pm-main-gpu-vision-gpu-max512-img1.log
 .worktree/e4b-16pm-diag-baseline-gpu.log
+.worktree/e4b-16pm-diag-baseline-fresh.log
+.worktree/e4b-16pm-diag-convert-weights-off.log
+.worktree/e4b-16pm-diag-share-constants-off.log
+.worktree/e4b-16pm-diag-external-tensors-on.log
+.worktree/e4b-16pm-diag-cache-compiled-shaders-only.log
+.worktree/e4b-16pm-diag-main-fp16.log
+.worktree/e4b-16pm-diag-main-fp16-img1.log
+.worktree/e4b-16pm-diag-main-fp16-max512-img1.log
+.worktree/e4b-16pm-diag-main-gpu-fp16-vision-cpu-max512.log
 ```

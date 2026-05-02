@@ -66,12 +66,19 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
 #else
         let environment: [String: String] = [:]
 #endif
+        let runtimeCacheDirectory = Self.runtimeCacheDirectory(
+            baseDirectory: cacheDirectory,
+            environment: environment
+        )
         // 0=VERBOSE, 1=DEBUG, 2=INFO, 3=WARNING, 4=ERROR, 5=FATAL, 1000=SILENT.
         let minLogLevel = environment["LITERT_LM_MIN_LOG_LEVEL"].flatMap(Int32.init) ?? 3
         litert_lm_set_min_log_level(minLogLevel)
 
-        try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        ConsoleLog.debug("Ensured runtime cache directory exists.", category: "Runtime")
+        try FileManager.default.createDirectory(at: runtimeCacheDirectory, withIntermediateDirectories: true)
+        ConsoleLog.debug(
+            "Ensured runtime cache directory exists at \(runtimeCacheDirectory.path).",
+            category: "Runtime"
+        )
 
         let backendName = environment["LITERT_LM_BACKEND"] ?? "cpu"
         let normalizedBackendName = backendName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -212,14 +219,14 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             .map { "\($0.environmentKey)=\(environment[$0.environmentKey] ?? "default")" }
             .joined(separator: " ")
         ConsoleLog.debug(
-            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(environment["LITERT_LM_ACTIVATION_DATA_TYPE"] ?? "default") main_activation_data_type=\(environment["LITERT_LM_MAIN_ACTIVATION_DATA_TYPE"] ?? "default") vision_activation_data_type=\(environment["LITERT_LM_VISION_ACTIVATION_DATA_TYPE"] ?? "default") audio_activation_data_type=\(environment["LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(environment["LITERT_LM_MAX_NUM_TOKENS"] ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") prefill_batch_sizes=\(environment["LITERT_LM_PREFILL_BATCH_SIZES"] ?? "default") gpu_external_tensor_mode=\(environment["LITERT_LM_GPU_EXTERNAL_TENSOR_MODE"] ?? "default") gpu_hint_kernel_batch_size=\(environment["LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled") \(advancedLog).",
+            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(environment["LITERT_LM_ACTIVATION_DATA_TYPE"] ?? "default") main_activation_data_type=\(environment["LITERT_LM_MAIN_ACTIVATION_DATA_TYPE"] ?? "default") vision_activation_data_type=\(environment["LITERT_LM_VISION_ACTIVATION_DATA_TYPE"] ?? "default") audio_activation_data_type=\(environment["LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(environment["LITERT_LM_MAX_NUM_TOKENS"] ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") prefill_batch_sizes=\(environment["LITERT_LM_PREFILL_BATCH_SIZES"] ?? "default") gpu_external_tensor_mode=\(environment["LITERT_LM_GPU_EXTERNAL_TENSOR_MODE"] ?? "default") gpu_hint_kernel_batch_size=\(environment["LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled") cache_subdirectory=\(environment["LITERT_LM_CACHE_SUBDIRECTORY"] ?? "default") \(advancedLog).",
             category: "Runtime"
         )
 
-        cacheDirectory.path.withCString { cachePointer in
+        runtimeCacheDirectory.path.withCString { cachePointer in
             litert_lm_engine_settings_set_cache_dir(settings, cachePointer)
         }
-        ConsoleLog.debug("Configured engine cache directory.", category: "Runtime")
+        ConsoleLog.debug("Configured engine cache directory=\(runtimeCacheDirectory.path).", category: "Runtime")
 
         guard let engine = litert_lm_engine_create(settings) else {
             throw LiteRTLMRuntimeError("Failed to create LiteRT-LM engine.")
@@ -427,6 +434,25 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         ("LITERT_LM_GPU_CONTEXT_LOW_PRIORITY", 10),
         ("LITERT_LM_GPU_DISABLE_DELEGATE_CLUSTERING", 11),
     ]
+
+    private static func runtimeCacheDirectory(baseDirectory: URL, environment: [String: String]) -> URL {
+        guard let rawSubdirectory = environment["LITERT_LM_CACHE_SUBDIRECTORY"] else {
+            return baseDirectory
+        }
+        let sanitizedSubdirectory = rawSubdirectory
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .filter { character in
+                character.isLetter || character.isNumber || character == "-" || character == "_" || character == "."
+            }
+        guard !sanitizedSubdirectory.isEmpty else {
+            ConsoleLog.error(
+                "Ignoring invalid LITERT_LM_CACHE_SUBDIRECTORY=\(rawSubdirectory).",
+                category: "Runtime"
+            )
+            return baseDirectory
+        }
+        return baseDirectory.appendingPathComponent(sanitizedSubdirectory, isDirectory: true)
+    }
 
     private static func runtimeLibraryDirectory() -> URL {
         let fileManager = FileManager.default
