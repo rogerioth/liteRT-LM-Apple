@@ -229,7 +229,7 @@ final class InferenceViewModel: ObservableObject {
                 )
                 if let benchmark = result.benchmark {
                     ConsoleLog.info(
-                        "Benchmark init=\(benchmark.initializationDescription) ttft=\(benchmark.timeToFirstTokenDescription).",
+                        "Benchmark init=\(benchmark.initializationDescription) ttft=\(benchmark.timeToFirstTokenDescription) prefill=[\(benchmark.prefillDescription)] decode=[\(benchmark.decodeDescription)].",
                         category: "ViewModel"
                     )
                 }

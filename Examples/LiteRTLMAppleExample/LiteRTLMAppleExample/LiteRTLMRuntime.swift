@@ -132,15 +132,21 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         )
         timing.mark("cache_prepare")
 
-        let backendName = environment["LITERT_LM_BACKEND"] ?? "cpu"
+        let backendName = Self.resolvedBackendName(environment: environment)
         let normalizedBackendName = backendName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let visionBackendName = environment["LITERT_LM_VISION_BACKEND"] ?? "cpu"
+        let visionBackendName = Self.resolvedVisionBackendName(
+            environment: environment,
+            mainBackendName: normalizedBackendName,
+            hasImage: inputs.imageData != nil
+        )
         let normalizedVisionBackendName = visionBackendName.trimmingCharacters(in: .whitespacesAndNewlines)
         let usesVisionBackend = !normalizedVisionBackendName.isEmpty
             && normalizedVisionBackendName.lowercased() != "none"
+        let backendSource = environment["LITERT_LM_BACKEND"] == nil ? "default" : "environment"
+        let visionBackendSource = environment["LITERT_LM_VISION_BACKEND"] == nil ? "default" : "environment"
 
         let settings = modelURL.path.withCString { modelPathPointer in
-            backendName.withCString { backendPointer in
+            normalizedBackendName.withCString { backendPointer in
                 if usesVisionBackend {
                     return normalizedVisionBackendName.withCString { visionBackendPointer in
                         litert_lm_engine_settings_create(
@@ -166,7 +172,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         }
         defer { litert_lm_engine_settings_delete(settings) }
         ConsoleLog.info(
-            "Created engine settings backend=\(backendName) vision_backend=\(usesVisionBackend ? normalizedVisionBackendName : "none").",
+            "Created engine settings backend=\(normalizedBackendName) backend_source=\(backendSource) vision_backend=\(usesVisionBackend ? normalizedVisionBackendName : "none") vision_backend_source=\(visionBackendSource).",
             category: "Runtime"
         )
         timing.mark("engine_settings_create")
@@ -183,10 +189,16 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         let maxNumImages = environment["LITERT_LM_MAX_NUM_IMAGES"].flatMap(Int32.init) ?? 1
         litert_lm_engine_settings_set_max_num_images(settings, maxNumImages)
 
-        if let activationDataType = environment["LITERT_LM_ACTIVATION_DATA_TYPE"].flatMap(Int32.init) {
+        let activationDataType = environment["LITERT_LM_ACTIVATION_DATA_TYPE"].flatMap(Int32.init)
+        if let activationDataType {
             litert_lm_engine_settings_set_activation_data_type(settings, activationDataType)
         }
-        if let mainActivationDataType = environment["LITERT_LM_MAIN_ACTIVATION_DATA_TYPE"].flatMap(Int32.init) {
+        let mainActivationDataType = Self.resolvedMainActivationDataType(
+            environment: environment,
+            mainBackendName: normalizedBackendName,
+            globalActivationDataType: activationDataType
+        )
+        if let mainActivationDataType {
             litert_lm_engine_settings_set_main_activation_data_type(settings, mainActivationDataType)
         }
         if let visionActivationDataType = environment["LITERT_LM_VISION_ACTIVATION_DATA_TYPE"].flatMap(Int32.init) {
@@ -196,7 +208,11 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             litert_lm_engine_settings_set_audio_activation_data_type(settings, audioActivationDataType)
         }
 
-        if let maxNumTokens = environment["LITERT_LM_MAX_NUM_TOKENS"].flatMap(Int32.init) {
+        let maxNumTokens = Self.resolvedMaxNumTokens(
+            environment: environment,
+            mainBackendName: normalizedBackendName
+        )
+        if let maxNumTokens {
             litert_lm_engine_settings_set_max_num_tokens(settings, maxNumTokens)
         }
 
@@ -291,7 +307,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             .map { "\($0.environmentKey)=\(environment[$0.environmentKey] ?? "default")" }
             .joined(separator: " ")
         ConsoleLog.debug(
-            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(environment["LITERT_LM_ACTIVATION_DATA_TYPE"] ?? "default") main_activation_data_type=\(environment["LITERT_LM_MAIN_ACTIVATION_DATA_TYPE"] ?? "default") vision_activation_data_type=\(environment["LITERT_LM_VISION_ACTIVATION_DATA_TYPE"] ?? "default") audio_activation_data_type=\(environment["LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(environment["LITERT_LM_MAX_NUM_TOKENS"] ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") prefill_batch_sizes=\(environment["LITERT_LM_PREFILL_BATCH_SIZES"] ?? "default") gpu_external_tensor_mode=\(environment["LITERT_LM_GPU_EXTERNAL_TENSOR_MODE"] ?? "default") gpu_hint_kernel_batch_size=\(environment["LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled") cache_subdirectory=\(environment["LITERT_LM_CACHE_SUBDIRECTORY"] ?? "default") \(advancedLog) \(visionGpuLog).",
+            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(activationDataType.map(String.init) ?? "default") main_activation_data_type=\(mainActivationDataType.map(String.init) ?? "default") vision_activation_data_type=\(environment["LITERT_LM_VISION_ACTIVATION_DATA_TYPE"] ?? "default") audio_activation_data_type=\(environment["LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(maxNumTokens.map(String.init) ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") prefill_batch_sizes=\(environment["LITERT_LM_PREFILL_BATCH_SIZES"] ?? "default") gpu_external_tensor_mode=\(environment["LITERT_LM_GPU_EXTERNAL_TENSOR_MODE"] ?? "default") gpu_hint_kernel_batch_size=\(environment["LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled") cache_subdirectory=\(environment["LITERT_LM_CACHE_SUBDIRECTORY"] ?? "default") \(advancedLog) \(visionGpuLog).",
             category: "Runtime"
         )
 
@@ -299,7 +315,10 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             litert_lm_engine_settings_set_cache_dir(settings, cachePointer)
         }
         ConsoleLog.debug("Configured engine cache directory=\(runtimeCacheDirectory.path).", category: "Runtime")
-        timing.mark("engine_settings_configure", metadata: "benchmark=\(benchmarkEnabled ? "enabled" : "disabled")")
+        timing.mark(
+            "engine_settings_configure",
+            metadata: "backend=\(normalizedBackendName) vision_backend=\(usesVisionBackend ? normalizedVisionBackendName : "none") max_num_tokens=\(maxNumTokens.map(String.init) ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled")"
+        )
 
         guard let engine = litert_lm_engine_create(settings) else {
             throw LiteRTLMRuntimeError("Failed to create LiteRT-LM engine.")
@@ -504,6 +523,50 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         let modelName = modelURL.lastPathComponent.lowercased()
         guard usesMainCPU, usesVisionGPU, modelName.contains("e4b") else { return nil }
         return "builtin"
+    }
+
+    private static func resolvedBackendName(environment: [String: String]) -> String {
+        environment["LITERT_LM_BACKEND"] ?? "gpu"
+    }
+
+    private static func resolvedVisionBackendName(
+        environment: [String: String],
+        mainBackendName: String,
+        hasImage: Bool
+    ) -> String {
+        if let visionBackendName = environment["LITERT_LM_VISION_BACKEND"] {
+            return visionBackendName
+        }
+
+        guard hasImage else { return "none" }
+        return mainBackendName.lowercased() == "gpu" ? "gpu" : "cpu"
+    }
+
+    private static func resolvedMainActivationDataType(
+        environment: [String: String],
+        mainBackendName: String,
+        globalActivationDataType: Int32?
+    ) -> Int32? {
+        if let mainActivationDataType = environment["LITERT_LM_MAIN_ACTIVATION_DATA_TYPE"].flatMap(Int32.init) {
+            return mainActivationDataType
+        }
+
+        guard globalActivationDataType == nil, mainBackendName.lowercased() == "gpu" else {
+            return nil
+        }
+        return 1
+    }
+
+    private static func resolvedMaxNumTokens(
+        environment: [String: String],
+        mainBackendName: String
+    ) -> Int32? {
+        if let maxNumTokens = environment["LITERT_LM_MAX_NUM_TOKENS"].flatMap(Int32.init) {
+            return maxNumTokens
+        }
+
+        guard mainBackendName.lowercased() == "gpu" else { return nil }
+        return 384
     }
 
     private static func cpuKernelModeValue(_ value: String?) -> Int32? {

@@ -403,6 +403,10 @@ struct ContentView: View {
                     InfoRow(label: "Initialization", value: benchmark.initializationDescription, monospaced: true)
                     Divider()
                     InfoRow(label: "Time to first token", value: benchmark.timeToFirstTokenDescription, monospaced: true)
+                    Divider()
+                    InfoRow(label: "Prefill", value: benchmark.prefillDescription, monospaced: true)
+                    Divider()
+                    InfoRow(label: "Decode", value: benchmark.decodeDescription, monospaced: true)
                 }
             }
         }
