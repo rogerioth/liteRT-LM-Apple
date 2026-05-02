@@ -110,6 +110,15 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             category: "Runtime"
         )
 
+        let runtimeLibraryDirectory = Self.runtimeLibraryDirectory()
+        runtimeLibraryDirectory.path.withCString { runtimeLibraryDirectoryPointer in
+            litert_lm_engine_settings_set_runtime_library_dir(settings, runtimeLibraryDirectoryPointer)
+        }
+        ConsoleLog.info(
+            "Configured LiteRT runtime library directory=\(runtimeLibraryDirectory.path).",
+            category: "Runtime"
+        )
+
         let maxNumImages = environment["LITERT_LM_MAX_NUM_IMAGES"].flatMap(Int32.init) ?? 1
         litert_lm_engine_settings_set_max_num_images(settings, maxNumImages)
 
@@ -294,6 +303,22 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         }
 
         return normalizedText
+    }
+
+    private static func runtimeLibraryDirectory() -> URL {
+        let fileManager = FileManager.default
+        let frameworkDirectory = Bundle.main.bundleURL.appendingPathComponent("Frameworks", isDirectory: true)
+        let candidates = [
+            Bundle.main.privateFrameworksURL,
+            frameworkDirectory,
+            Bundle.main.bundleURL,
+        ].compactMap { $0 }
+
+        return candidates.first {
+            fileManager.fileExists(
+                atPath: $0.appendingPathComponent("libLiteRtMetalAccelerator.dylib").path
+            )
+        } ?? Bundle.main.privateFrameworksURL ?? frameworkDirectory
     }
 }
 

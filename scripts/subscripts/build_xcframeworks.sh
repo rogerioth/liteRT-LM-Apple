@@ -85,6 +85,9 @@ mac_engine_input="${upstream_dir}/bazel-out/darwin_arm64-opt/bin/c/libengine_sha
 device_constraint_input="${upstream_dir}/prebuilt/ios_arm64/libGemmaModelConstraintProvider.dylib"
 sim_constraint_input="${upstream_dir}/prebuilt/ios_sim_arm64/libGemmaModelConstraintProvider.dylib"
 mac_constraint_input="${upstream_dir}/prebuilt/macos_arm64/libGemmaModelConstraintProvider.dylib"
+device_metal_accelerator_input="${upstream_dir}/prebuilt/ios_arm64/libLiteRtMetalAccelerator.dylib"
+sim_metal_accelerator_input="${upstream_dir}/prebuilt/ios_sim_arm64/libLiteRtMetalAccelerator.dylib"
+mac_metal_accelerator_input="${upstream_dir}/prebuilt/macos_arm64/libLiteRtMetalAccelerator.dylib"
 
 device_engine_staged="${tmp_dir}/ios-arm64/libLiteRTLMEngineCPU.dylib"
 sim_engine_staged="${tmp_dir}/ios-arm64-simulator/libLiteRTLMEngineCPU.dylib"
@@ -98,9 +101,16 @@ catalyst_constraint_staged="${tmp_dir}/ios-arm64-maccatalyst/libGemmaModelConstr
 mac_constraint_staged="${tmp_dir}/macos-arm64/libGemmaModelConstraintProvider.dylib"
 vision_constraint_staged="${tmp_dir}/xros-arm64/libGemmaModelConstraintProvider.dylib"
 vision_sim_constraint_staged="${tmp_dir}/xros-arm64-simulator/libGemmaModelConstraintProvider.dylib"
+device_metal_accelerator_staged="${tmp_dir}/ios-arm64/libLiteRtMetalAccelerator.dylib"
+sim_metal_accelerator_staged="${tmp_dir}/ios-arm64-simulator/libLiteRtMetalAccelerator.dylib"
+catalyst_metal_accelerator_staged="${tmp_dir}/ios-arm64-maccatalyst/libLiteRtMetalAccelerator.dylib"
+mac_metal_accelerator_staged="${tmp_dir}/macos-arm64/libLiteRtMetalAccelerator.dylib"
+vision_metal_accelerator_staged="${tmp_dir}/xros-arm64/libLiteRtMetalAccelerator.dylib"
+vision_sim_metal_accelerator_staged="${tmp_dir}/xros-arm64-simulator/libLiteRtMetalAccelerator.dylib"
 headers_staged="${tmp_dir}/Headers"
 engine_placeholder_headers_staged="${tmp_dir}/EnginePlaceholderHeaders"
 constraint_placeholder_headers_staged="${tmp_dir}/ConstraintPlaceholderHeaders"
+metal_accelerator_placeholder_headers_staged="${tmp_dir}/MetalAcceleratorPlaceholderHeaders"
 
 mkdir -p \
   "$(dirname "${device_engine_staged}")" \
@@ -111,9 +121,16 @@ mkdir -p \
   "$(dirname "${vision_sim_engine_staged}")" \
   "${headers_staged}" \
   "${engine_placeholder_headers_staged}" \
-  "${constraint_placeholder_headers_staged}"
+  "${constraint_placeholder_headers_staged}" \
+  "${metal_accelerator_placeholder_headers_staged}"
 
-for dylib in "${device_constraint_input}" "${sim_constraint_input}" "${mac_constraint_input}"; do
+for dylib in \
+  "${device_constraint_input}" \
+  "${sim_constraint_input}" \
+  "${mac_constraint_input}" \
+  "${device_metal_accelerator_input}" \
+  "${sim_metal_accelerator_input}" \
+  "${mac_metal_accelerator_input}"; do
   if ! file "${dylib}" | grep -q "Mach-O"; then
     echo "Expected a Mach-O dylib but found something else: ${dylib}" >&2
     echo "Run ./scripts/buildall.sh again and ensure git-lfs materializes the prebuilt binaries." >&2
@@ -125,6 +142,7 @@ install -m 0644 "${upstream_dir}/c/engine.h" "${public_headers_dir}/engine.h"
 install -m 0644 "${upstream_dir}/c/engine.h" "${headers_staged}/engine.h"
 printf '/* Placeholder header to preserve the XCFramework Headers directory in Git. */\n' > "${engine_placeholder_headers_staged}/LiteRTLMEngineCPUPlaceholder.h"
 printf '/* Placeholder header to preserve the XCFramework Headers directory in Git. */\n' > "${constraint_placeholder_headers_staged}/GemmaModelConstraintProviderPlaceholder.h"
+printf '/* Placeholder header to preserve the XCFramework Headers directory in Git. */\n' > "${metal_accelerator_placeholder_headers_staged}/LiteRtMetalAcceleratorPlaceholder.h"
 install -m 0755 "${device_engine_input}" "${device_engine_staged}"
 install -m 0755 "${sim_engine_input}" "${sim_engine_staged}"
 # Upstream does not publish dedicated Mac Catalyst dylibs, so derive a
@@ -141,10 +159,17 @@ retag_build_version maccatalyst "${sim_constraint_input}" "${catalyst_constraint
 install -m 0755 "${mac_constraint_input}" "${mac_constraint_staged}"
 retag_build_version visionos "${device_constraint_input}" "${vision_constraint_staged}" "1.0"
 retag_build_version visionossim "${sim_constraint_input}" "${vision_sim_constraint_staged}" "1.0"
+install -m 0755 "${device_metal_accelerator_input}" "${device_metal_accelerator_staged}"
+install -m 0755 "${sim_metal_accelerator_input}" "${sim_metal_accelerator_staged}"
+retag_build_version maccatalyst "${sim_metal_accelerator_input}" "${catalyst_metal_accelerator_staged}"
+install -m 0755 "${mac_metal_accelerator_input}" "${mac_metal_accelerator_staged}"
+retag_build_version visionos "${device_metal_accelerator_input}" "${vision_metal_accelerator_staged}" "1.0"
+retag_build_version visionossim "${sim_metal_accelerator_input}" "${vision_sim_metal_accelerator_staged}" "1.0"
 
 rm -rf \
   "${artifacts_dir}/LiteRTLMEngineCPU.xcframework" \
-  "${artifacts_dir}/GemmaModelConstraintProvider.xcframework"
+  "${artifacts_dir}/GemmaModelConstraintProvider.xcframework" \
+  "${artifacts_dir}/LiteRtMetalAccelerator.xcframework"
 
 xcodebuild -create-xcframework \
   -library "${device_engine_staged}" -headers "${engine_placeholder_headers_staged}" \
@@ -164,7 +189,17 @@ xcodebuild -create-xcframework \
   -library "${vision_sim_constraint_staged}" -headers "${constraint_placeholder_headers_staged}" \
   -output "${artifacts_dir}/GemmaModelConstraintProvider.xcframework"
 
+xcodebuild -create-xcframework \
+  -library "${device_metal_accelerator_staged}" -headers "${metal_accelerator_placeholder_headers_staged}" \
+  -library "${sim_metal_accelerator_staged}" -headers "${metal_accelerator_placeholder_headers_staged}" \
+  -library "${catalyst_metal_accelerator_staged}" -headers "${metal_accelerator_placeholder_headers_staged}" \
+  -library "${mac_metal_accelerator_staged}" -headers "${metal_accelerator_placeholder_headers_staged}" \
+  -library "${vision_metal_accelerator_staged}" -headers "${metal_accelerator_placeholder_headers_staged}" \
+  -library "${vision_sim_metal_accelerator_staged}" -headers "${metal_accelerator_placeholder_headers_staged}" \
+  -output "${artifacts_dir}/LiteRtMetalAccelerator.xcframework"
+
 echo "Updated package artifacts:"
 echo "  ${artifacts_dir}/LiteRTLMEngineCPU.xcframework"
 echo "  ${artifacts_dir}/GemmaModelConstraintProvider.xcframework"
+echo "  ${artifacts_dir}/LiteRtMetalAccelerator.xcframework"
 echo "  ${public_headers_dir}/engine.h"

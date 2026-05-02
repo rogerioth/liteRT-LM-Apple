@@ -1,5 +1,20 @@
+diff --git a/WORKSPACE b/WORKSPACE
+index a18da61b..3506be73 100644
+--- a/WORKSPACE
++++ b/WORKSPACE
+@@ -441,7 +441,9 @@ load("@rules_android_ndk//:rules.bzl", "android_ndk_repository")
+ 
+ android_ndk_repository(name = "androidndk")
+ 
+-android_sdk_repository(name = "androidsdk")
++# The Apple package build does not use Android targets. The upstream
++# unconditional SDK repository fails on machines without an Android SDK.
++# android_sdk_repository(name = "androidsdk")
+ 
+ # Configure Android NDK only when ANDROID_NDK_HOME is set.
+ # Creates current_android_ndk_env.bzl as a workaround since shell environment is available only
 diff --git a/c/BUILD b/c/BUILD
-index 4e157c2f..5ec6a371 100644
+index 4e157c2f..d02c85d1 100644
 --- a/c/BUILD
 +++ b/c/BUILD
 @@ -85,6 +85,24 @@ cc_library(
@@ -27,25 +42,26 @@ index 4e157c2f..5ec6a371 100644
  cc_test(
      name = "engine_test",
      srcs = ["engine_test.cc"],
-diff --git a/WORKSPACE b/WORKSPACE
---- a/WORKSPACE
-+++ b/WORKSPACE
-@@ -441,7 +441,9 @@ load("@rules_android_ndk//:rules.bzl", "android_ndk_repository")
- 
- android_ndk_repository(name = "androidndk")
- 
--android_sdk_repository(name = "androidsdk")
-+# The Apple package build does not use Android targets. The upstream
-+# unconditional SDK repository fails on machines without an Android SDK.
-+# android_sdk_repository(name = "androidsdk")
- 
- # Configure Android NDK only when ANDROID_NDK_HOME is set.
- # Creates current_android_ndk_env.bzl as a workaround since shell environment is available only
 diff --git a/c/engine.cc b/c/engine.cc
-index 28b8518c..3cf22c78 100644
+index 28b8518c..87f0c425 100644
 --- a/c/engine.cc
 +++ b/c/engine.cc
-@@ -396,6 +396,15 @@ void litert_lm_engine_settings_set_max_num_tokens(
+@@ -385,6 +385,14 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
+   return c_settings;
+ }
+ 
++void litert_lm_engine_settings_set_runtime_library_dir(
++    LiteRtLmEngineSettings* settings, const char* runtime_library_dir) {
++  if (settings && settings->settings && runtime_library_dir) {
++    settings->settings->GetMutableMainExecutorSettings().SetLitertDispatchLibDir(
++        runtime_library_dir);
++  }
++}
++
+ void litert_lm_engine_settings_delete(LiteRtLmEngineSettings* settings) {
+   delete settings;
+ }
+@@ -396,6 +404,15 @@ void litert_lm_engine_settings_set_max_num_tokens(
          max_num_tokens);
    }
  }
@@ -62,10 +78,26 @@ index 28b8518c..3cf22c78 100644
      LiteRtLmEngineSettings* settings, bool parallel_file_section_loading) {
    if (settings && settings->settings) {
 diff --git a/c/engine.h b/c/engine.h
-index aa1eec8b..a08e62ad 100644
+index aa1eec8b..7c2a6ec4 100644
 --- a/c/engine.h
 +++ b/c/engine.h
-@@ -262,6 +262,18 @@ LITERT_LM_C_API_EXPORT
+@@ -248,6 +248,15 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
+     const char* model_path, const char* backend_str,
+     const char* vision_backend_str, const char* audio_backend_str);
+ 
++// Sets the directory where LiteRT should look for runtime plugin libraries,
++// such as libLiteRtMetalAccelerator.dylib.
++//
++// @param settings The engine settings.
++// @param runtime_library_dir The directory containing LiteRT runtime plugins.
++LITERT_LM_C_API_EXPORT
++void litert_lm_engine_settings_set_runtime_library_dir(
++    LiteRtLmEngineSettings* settings, const char* runtime_library_dir);
++
+ // Destroys LiteRT LM Engine Settings.
+ //
+ // @param settings The settings to destroy.
+@@ -262,6 +271,18 @@ LITERT_LM_C_API_EXPORT
  void litert_lm_engine_settings_set_max_num_tokens(
      LiteRtLmEngineSettings* settings, int max_num_tokens);
  
@@ -84,3 +116,55 @@ index aa1eec8b..a08e62ad 100644
  // Sets whether the engine should load different sections of the litertlm file
  // in parallel. Defaults to true.
  //
+diff --git a/runtime/core/engine_advanced_impl.cc b/runtime/core/engine_advanced_impl.cc
+index 60def743..6f9abbe5 100644
+--- a/runtime/core/engine_advanced_impl.cc
++++ b/runtime/core/engine_advanced_impl.cc
+@@ -88,8 +88,19 @@ absl::StatusOr<Environment&> GetEnvironment(EngineSettings& engine_settings,
+                    .GetAdvancedSettings() ||  // Default is true.
+               main_executor_settings.GetAdvancedSettings()
+                   ->configure_magic_numbers) {
+-            env_options = helper->GetLiteRtEnvOptions(model_resources,
+-                                                      main_executor_settings);
++            auto magic_number_env_options = helper->GetLiteRtEnvOptions(
++                model_resources, main_executor_settings);
++            env_options.insert(env_options.end(),
++                               magic_number_env_options.begin(),
++                               magic_number_env_options.end());
++          }
++          if (!main_executor_settings.GetLitertDispatchLibDir().empty()) {
++            env_options.push_back(::litert::EnvironmentOptions::Option{
++                ::litert::EnvironmentOptions::Tag::kRuntimeLibraryDir,
++                main_executor_settings.GetLitertDispatchLibDir()});
++            ABSL_LOG(INFO) << "Setting runtime library path from "
++                              "main_executor_settings: "
++                           << main_executor_settings.GetLitertDispatchLibDir();
+           }
+         } else {
+ #if defined(LITERT_DISABLE_NPU)
+diff --git a/runtime/core/engine_impl.cc b/runtime/core/engine_impl.cc
+index 3921482d..fda4ed3e 100644
+--- a/runtime/core/engine_impl.cc
++++ b/runtime/core/engine_impl.cc
+@@ -87,8 +87,19 @@ absl::StatusOr<Environment&> GetEnvironment(EngineSettings& engine_settings,
+                    .GetAdvancedSettings() ||  // Default is true.
+               main_executor_settings.GetAdvancedSettings()
+                   ->configure_magic_numbers) {
+-            env_options = helper->GetLiteRtEnvOptions(model_resources,
+-                                                      main_executor_settings);
++            auto magic_number_env_options = helper->GetLiteRtEnvOptions(
++                model_resources, main_executor_settings);
++            env_options.insert(env_options.end(),
++                               magic_number_env_options.begin(),
++                               magic_number_env_options.end());
++          }
++          if (!main_executor_settings.GetLitertDispatchLibDir().empty()) {
++            env_options.push_back(::litert::EnvironmentOptions::Option{
++                ::litert::EnvironmentOptions::Tag::kRuntimeLibraryDir,
++                main_executor_settings.GetLitertDispatchLibDir()});
++            ABSL_LOG(INFO) << "Setting runtime library path from "
++                              "main_executor_settings: "
++                           << main_executor_settings.GetLitertDispatchLibDir();
+           }
+         } else {
+ #if defined(LITERT_DISABLE_NPU)
