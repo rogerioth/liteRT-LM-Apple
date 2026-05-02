@@ -184,6 +184,22 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
                 }
             }
         }
+        for advancedBoolSetting in Self.visionGpuBoolSettings {
+            if let rawValue = environment[advancedBoolSetting.environmentKey] {
+                if let enabled = Bool(rawValue) {
+                    litert_lm_engine_settings_set_vision_gpu_bool(
+                        settings,
+                        advancedBoolSetting.option,
+                        enabled
+                    )
+                } else {
+                    ConsoleLog.error(
+                        "Ignoring invalid \(advancedBoolSetting.environmentKey)=\(rawValue).",
+                        category: "Runtime"
+                    )
+                }
+            }
+        }
 
         if let externalTensorMode = environment["LITERT_LM_GPU_EXTERNAL_TENSOR_MODE"].flatMap(Bool.init) {
             litert_lm_engine_settings_set_gpu_external_tensor_mode(settings, externalTensorMode)
@@ -218,8 +234,11 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         let advancedLog = Self.advancedBoolSettings
             .map { "\($0.environmentKey)=\(environment[$0.environmentKey] ?? "default")" }
             .joined(separator: " ")
+        let visionGpuLog = Self.visionGpuBoolSettings
+            .map { "\($0.environmentKey)=\(environment[$0.environmentKey] ?? "default")" }
+            .joined(separator: " ")
         ConsoleLog.debug(
-            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(environment["LITERT_LM_ACTIVATION_DATA_TYPE"] ?? "default") main_activation_data_type=\(environment["LITERT_LM_MAIN_ACTIVATION_DATA_TYPE"] ?? "default") vision_activation_data_type=\(environment["LITERT_LM_VISION_ACTIVATION_DATA_TYPE"] ?? "default") audio_activation_data_type=\(environment["LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(environment["LITERT_LM_MAX_NUM_TOKENS"] ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") prefill_batch_sizes=\(environment["LITERT_LM_PREFILL_BATCH_SIZES"] ?? "default") gpu_external_tensor_mode=\(environment["LITERT_LM_GPU_EXTERNAL_TENSOR_MODE"] ?? "default") gpu_hint_kernel_batch_size=\(environment["LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled") cache_subdirectory=\(environment["LITERT_LM_CACHE_SUBDIRECTORY"] ?? "default") \(advancedLog).",
+            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(environment["LITERT_LM_ACTIVATION_DATA_TYPE"] ?? "default") main_activation_data_type=\(environment["LITERT_LM_MAIN_ACTIVATION_DATA_TYPE"] ?? "default") vision_activation_data_type=\(environment["LITERT_LM_VISION_ACTIVATION_DATA_TYPE"] ?? "default") audio_activation_data_type=\(environment["LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(environment["LITERT_LM_MAX_NUM_TOKENS"] ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") prefill_batch_sizes=\(environment["LITERT_LM_PREFILL_BATCH_SIZES"] ?? "default") gpu_external_tensor_mode=\(environment["LITERT_LM_GPU_EXTERNAL_TENSOR_MODE"] ?? "default") gpu_hint_kernel_batch_size=\(environment["LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled") cache_subdirectory=\(environment["LITERT_LM_CACHE_SUBDIRECTORY"] ?? "default") \(advancedLog) \(visionGpuLog).",
             category: "Runtime"
         )
 
@@ -433,6 +452,13 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         ("LITERT_LM_GPU_HINT_WAITING_FOR_COMPLETION", 9),
         ("LITERT_LM_GPU_CONTEXT_LOW_PRIORITY", 10),
         ("LITERT_LM_GPU_DISABLE_DELEGATE_CLUSTERING", 11),
+    ]
+
+    private static let visionGpuBoolSettings: [(environmentKey: String, option: Int32)] = [
+        ("LITERT_LM_VISION_GPU_MADVISE_ORIGINAL_SHARED_TENSORS", 1),
+        ("LITERT_LM_VISION_GPU_CONVERT_WEIGHTS_ON_GPU", 2),
+        ("LITERT_LM_VISION_GPU_CACHE_COMPILED_SHADERS_ONLY", 5),
+        ("LITERT_LM_VISION_GPU_SHARE_CONSTANT_TENSORS", 6),
     ]
 
     private static func runtimeCacheDirectory(baseDirectory: URL, environment: [String: String]) -> URL {

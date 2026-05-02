@@ -43,7 +43,7 @@ index 4e157c2f..d02c85d1 100644
      name = "engine_test",
      srcs = ["engine_test.cc"],
 diff --git a/c/engine.cc b/c/engine.cc
-index 28b8518c..f05f40d1 100644
+index 28b8518c..b13f4873 100644
 --- a/c/engine.cc
 +++ b/c/engine.cc
 @@ -29,6 +29,7 @@
@@ -118,7 +118,7 @@ index 28b8518c..f05f40d1 100644
    }
  }
  
-@@ -445,11 +482,170 @@ void litert_lm_engine_settings_set_enable_speculative_decoding(
+@@ -445,11 +482,202 @@ void litert_lm_engine_settings_set_enable_speculative_decoding(
    }
  }
  
@@ -198,6 +198,38 @@ index 28b8518c..f05f40d1 100644
 +  }
 +
 +  main_settings.SetAdvancedSettings(advanced_settings);
++}
++
++void litert_lm_engine_settings_set_vision_gpu_bool(
++    LiteRtLmEngineSettings* settings, int option, bool value) {
++  if (!settings || !settings->settings) {
++    return;
++  }
++
++  auto& vision_settings =
++      settings->settings->GetMutableVisionExecutorSettings();
++  if (!vision_settings.has_value()) {
++    return;
++  }
++
++  switch (static_cast<LiteRtLmAdvancedBoolOption>(option)) {
++    case kLiteRtLmAdvancedMadviseOriginalSharedTensors:
++      vision_settings->SetGpuMadviseOriginalSharedTensors(value);
++      break;
++    case kLiteRtLmAdvancedConvertWeightsOnGpu:
++      vision_settings->SetGpuConvertWeightsOnGpu(value);
++      break;
++    case kLiteRtLmAdvancedCacheCompiledShadersOnly:
++      vision_settings->SetGpuCacheCompiledShadersOnly(value);
++      break;
++    case kLiteRtLmAdvancedShareConstantTensors:
++      vision_settings->SetGpuShareConstantTensors(value);
++      break;
++    default:
++      ABSL_LOG(WARNING)
++          << "Ignoring invalid vision GPU bool option: " << option;
++      return;
++  }
 +}
 +
 +void litert_lm_engine_settings_set_gpu_external_tensor_mode(
@@ -290,7 +322,7 @@ index 28b8518c..f05f40d1 100644
    }
  }
  
-@@ -468,6 +664,34 @@ void litert_lm_engine_settings_set_prefill_chunk_size(
+@@ -468,6 +696,34 @@ void litert_lm_engine_settings_set_prefill_chunk_size(
    }
  }
  
@@ -326,7 +358,7 @@ index 28b8518c..f05f40d1 100644
      const LiteRtLmEngineSettings* settings) {
    if (!settings || !settings->settings) {
 diff --git a/c/engine.h b/c/engine.h
-index aa1eec8b..6de1f8b2 100644
+index aa1eec8b..88d970f4 100644
 --- a/c/engine.h
 +++ b/c/engine.h
 @@ -111,6 +111,22 @@ typedef struct {
@@ -427,7 +459,7 @@ index aa1eec8b..6de1f8b2 100644
  // Sets the prefill chunk size for the engine. Only applicable for CPU backend
  // with dynamic models.
  //
-@@ -329,6 +399,42 @@ LITERT_LM_C_API_EXPORT
+@@ -329,6 +399,57 @@ LITERT_LM_C_API_EXPORT
  void litert_lm_engine_settings_set_enable_speculative_decoding(
      LiteRtLmEngineSettings* settings, bool enable_speculative_decoding);
  
@@ -448,6 +480,21 @@ index aa1eec8b..6de1f8b2 100644
 +// @param value The setting value.
 +LITERT_LM_C_API_EXPORT
 +void litert_lm_engine_settings_set_advanced_bool(
++    LiteRtLmEngineSettings* settings, int option, bool value);
++
++// Sets a boolean GPU diagnostic setting on the vision executor.
++//
++// Supported options are:
++// kLiteRtLmAdvancedMadviseOriginalSharedTensors,
++// kLiteRtLmAdvancedConvertWeightsOnGpu,
++// kLiteRtLmAdvancedCacheCompiledShadersOnly, and
++// kLiteRtLmAdvancedShareConstantTensors.
++//
++// @param settings The engine settings.
++// @param option The LiteRtLmAdvancedBoolOption value to set.
++// @param value The setting value.
++LITERT_LM_C_API_EXPORT
++void litert_lm_engine_settings_set_vision_gpu_bool(
 +    LiteRtLmEngineSettings* settings, int option, bool value);
 +
 +// Sets GPU external tensor mode on the main executor.
@@ -471,10 +518,10 @@ index aa1eec8b..6de1f8b2 100644
  // for destroying the engine using `litert_lm_engine_delete`.
  //
 diff --git a/c/engine_test.cc b/c/engine_test.cc
-index 4b422028..db33294b 100644
+index 4b422028..3b2836b7 100644
 --- a/c/engine_test.cc
 +++ b/c/engine_test.cc
-@@ -227,6 +227,127 @@ TEST(EngineCTest, SetEnableSpeculativeDecoding) {
+@@ -227,6 +227,154 @@ TEST(EngineCTest, SetEnableSpeculativeDecoding) {
                     .enable_speculative_decoding);
  }
  
@@ -545,6 +592,33 @@ index 4b422028..db33294b 100644
 +                    .GetBackendConfig<litert::lm::GpuConfig>();
 +  ASSERT_TRUE(config.ok());
 +  EXPECT_TRUE(config->external_tensor_mode);
++}
++
++TEST(EngineCTest, SetVisionGpuAdvancedBool) {
++  const std::string task_path = "test_model_path_1";
++  EngineSettingsPtr settings(
++      litert_lm_engine_settings_create(task_path.c_str(), "gpu",
++                                       /* vision_backend_str */ "gpu",
++                                       /* audio_backend_str */ nullptr),
++      &litert_lm_engine_settings_delete);
++  ASSERT_NE(settings, nullptr);
++
++  litert_lm_engine_settings_set_vision_gpu_bool(
++      settings.get(), kLiteRtLmAdvancedConvertWeightsOnGpu, false);
++  litert_lm_engine_settings_set_vision_gpu_bool(
++      settings.get(), kLiteRtLmAdvancedShareConstantTensors, false);
++  litert_lm_engine_settings_set_vision_gpu_bool(
++      settings.get(), kLiteRtLmAdvancedCacheCompiledShadersOnly, true);
++  litert_lm_engine_settings_set_vision_gpu_bool(
++      settings.get(), kLiteRtLmAdvancedMadviseOriginalSharedTensors, false);
++
++  const auto vision_settings =
++      settings->settings->GetVisionExecutorSettings();
++  ASSERT_TRUE(vision_settings.has_value());
++  EXPECT_FALSE(vision_settings->GetGpuConvertWeightsOnGpu());
++  EXPECT_FALSE(vision_settings->GetGpuShareConstantTensors());
++  EXPECT_TRUE(vision_settings->GetGpuCacheCompiledShadersOnly());
++  EXPECT_FALSE(vision_settings->GetGpuMadviseOriginalSharedTensors());
 +}
 +
 +TEST(EngineCTest, SetGpuHintKernelBatchSize) {
@@ -831,3 +905,102 @@ index b2d630a9..370d87c1 100644
      LITERT_ASSIGN_OR_RETURN(auto& runtime_options,
                              compilation_options.GetRuntimeOptions());
      runtime_options.SetCompressQuantizationZeroPoints(true);
+diff --git a/runtime/executor/vision_executor_settings.cc b/runtime/executor/vision_executor_settings.cc
+index 1305aec0..d8a4d260 100644
+--- a/runtime/executor/vision_executor_settings.cc
++++ b/runtime/executor/vision_executor_settings.cc
+@@ -102,6 +102,14 @@ std::ostream& operator<<(std::ostream& os,
+   os << "  ModelAssets: " << settings.GetModelAssets() << std::endl;
+   os << "  EncoderBackend: " << settings.GetEncoderBackend() << std::endl;
+   os << "  AdapterBackend: " << settings.GetAdapterBackend() << std::endl;
++  os << "  gpu_madvise_original_shared_tensors: "
++     << settings.GetGpuMadviseOriginalSharedTensors() << std::endl;
++  os << "  convert_weights_on_gpu: "
++     << settings.GetGpuConvertWeightsOnGpu() << std::endl;
++  os << "  cache_compiled_shaders_only: "
++     << settings.GetGpuCacheCompiledShadersOnly() << std::endl;
++  os << "  share_constant_tensors: "
++     << settings.GetGpuShareConstantTensors() << std::endl;
+   return os;
+ }
+ 
+diff --git a/runtime/executor/vision_executor_settings.h b/runtime/executor/vision_executor_settings.h
+index 407da54d..b36e9831 100644
+--- a/runtime/executor/vision_executor_settings.h
++++ b/runtime/executor/vision_executor_settings.h
+@@ -118,6 +118,34 @@ class VisionExecutorSettings : public ExecutorSettingsBase {
+   GetProgramCacheFile(absl::string_view suffix,
+                       bool check_and_clean = false) const;
+ 
++  bool GetGpuMadviseOriginalSharedTensors() const {
++    return gpu_madvise_original_shared_tensors_;
++  }
++  void SetGpuMadviseOriginalSharedTensors(bool value) {
++    gpu_madvise_original_shared_tensors_ = value;
++  }
++
++  bool GetGpuConvertWeightsOnGpu() const {
++    return gpu_convert_weights_on_gpu_;
++  }
++  void SetGpuConvertWeightsOnGpu(bool value) {
++    gpu_convert_weights_on_gpu_ = value;
++  }
++
++  bool GetGpuCacheCompiledShadersOnly() const {
++    return gpu_cache_compiled_shaders_only_;
++  }
++  void SetGpuCacheCompiledShadersOnly(bool value) {
++    gpu_cache_compiled_shaders_only_ = value;
++  }
++
++  bool GetGpuShareConstantTensors() const {
++    return gpu_share_constant_tensors_;
++  }
++  void SetGpuShareConstantTensors(bool value) {
++    gpu_share_constant_tensors_ = value;
++  }
++
+  private:
+   explicit VisionExecutorSettings(const ModelAssets& model_assets)
+       : ExecutorSettingsBase(model_assets) {}
+@@ -139,6 +167,11 @@ class VisionExecutorSettings : public ExecutorSettingsBase {
+ 
+   // The program cache file to use for the vision adapter model.
+   std::shared_ptr<litert::lm::ScopedFile> scoped_adapter_program_cache_file_;
++
++  bool gpu_madvise_original_shared_tensors_ = true;
++  bool gpu_convert_weights_on_gpu_ = true;
++  bool gpu_cache_compiled_shaders_only_ = false;
++  bool gpu_share_constant_tensors_ = true;
+ };
+ 
+ std::ostream& operator<<(std::ostream& os,
+diff --git a/runtime/executor/vision_litert_compiled_model_executor.cc b/runtime/executor/vision_litert_compiled_model_executor.cc
+index e121ecf4..2dbc36e0 100644
+--- a/runtime/executor/vision_litert_compiled_model_executor.cc
++++ b/runtime/executor/vision_litert_compiled_model_executor.cc
+@@ -85,7 +85,8 @@ absl::Status SetGpuOptions(const VisionExecutorSettings& executor_settings,
+ #if defined(LITERT_USE_WEBGPU_ACCELERATOR)
+   gpu_options.SetBackend(GpuOptions::Backend::kWebGpu);
+ #endif  // defined(LITERT_USE_WEBGPU_ACCELERATOR)
+-  gpu_options.EnableConstantTensorSharing(true);
++  gpu_options.EnableConstantTensorSharing(
++      executor_settings.GetGpuShareConstantTensors());
+   if (executor_settings.GetActivationDataType().has_value()) {
+     if (executor_settings.GetActivationDataType().value() ==
+         ActivationDataType::FLOAT32) {
+@@ -104,8 +105,12 @@ absl::Status SetGpuOptions(const VisionExecutorSettings& executor_settings,
+ #else   // !__APPLE__
+   gpu_options.SetPreferTextureWeights(true);
+ #endif  // !__APPLE__
+-  gpu_options.SetMadviseOriginalSharedTensors(true);
+-  gpu_options.SetConvertWeightsOnGpu(true);
++  gpu_options.CacheCompiledProgramsOnly(
++      executor_settings.GetGpuCacheCompiledShadersOnly());
++  gpu_options.SetMadviseOriginalSharedTensors(
++      executor_settings.GetGpuMadviseOriginalSharedTensors());
++  gpu_options.SetConvertWeightsOnGpu(
++      executor_settings.GetGpuConvertWeightsOnGpu());
+   return absl::OkStatus();
+ }
+ 

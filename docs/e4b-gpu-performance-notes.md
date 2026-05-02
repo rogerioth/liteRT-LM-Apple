@@ -108,9 +108,14 @@ Retests on the iPhone 16 Pro Max used the rebuilt local LiteRT-LM dylib and the 
 ```text
 gemma-4-E4B-it.litertlm
 size: 3654467584 bytes
+sha256: f335f2bfd1b758dc6476db16c0f41854bd6237e2658d604cbe566bcefd00a7bc
 main section signatures: decode, prefill_1024, prefill_128, verify
 extra section: tf_lite_mtp_drafter, backend_constraint=cpu
 ```
+
+This SHA-256 matches the current Hugging Face resolver `x-linked-etag` for
+`litert-community/gemma-4-E4B-it-litert-lm` on May 2, 2026, so the local file is
+not a stale pre-update artifact.
 
 The Edge Gallery artifact is different:
 
@@ -136,8 +141,18 @@ Observed main-GPU outcomes:
 - `max_tokens=2048 max_num_images=1`: main GPU compiled, but the per-layer embedder mmap failed and the vision encoder failed to allocate Metal textures.
 - `max_tokens=1024 max_num_images=1`: per-layer embedder mapped, but the vision encoder section failed to mmap.
 - `max_tokens=512 max_num_images=1`: per-layer embedder and vision model mapping progressed farther, then the vision encoder crashed during GPU initialization.
+- `main_activation_data_type=FLOAT16 max_tokens=512 max_num_images=1 vision_gpu_convert_weights_on_gpu=false`: still failed in the vision encoder Metal texture allocation path.
+- `main_activation_data_type=FLOAT16 max_tokens=512 max_num_images=1 vision_gpu_cache_compiled_shaders_only=true`: changed the vision delegate path from serialized data to graph compilation, but still failed allocating Metal textures.
+- `main_activation_data_type=FLOAT16 max_tokens=512 max_num_images=1 vision_gpu_share_constant_tensors=false`: reached vision delegate setup, then terminated with `std::bad_alloc`.
+- `main_activation_data_type=FLOAT16 max_tokens=512 max_num_images=1 vision_gpu_madvise_original_shared_tensors=false`: still failed allocating Metal textures.
+- `main_activation_data_type=FLOAT16 vision_activation_data_type=FLOAT16 max_tokens=512 max_num_images=1`: still failed allocating Metal textures.
 
 These failures happen before prompt-size or image-size choices can matter. The public artifact's all-GPU memory footprint is too high for this runtime/device combination even when the runtime settings are made smaller than Edge Gallery's.
+
+Two external signals are worth keeping with the local evidence:
+
+- The public Hugging Face model card currently advertises iPhone 17 Pro GPU results for this same artifact (`1189` prefill tokens/sec, `25.1` decode tokens/sec, `3380` MB CPU/GPU memory), so Google likely has a runtime/configuration path that can make the public file work.
+- `google-ai-edge/gallery#692` reports that the public Gallery repository still does not list Gemma 4 in the iOS allowlist and that public iOS LiteRT-LM integration fails before producing a response. The App Store listing also says version `1.0.3` fixed model-initialization crashes, but the corresponding public source path is not visible in the checked-out Gallery tree.
 
 ## Current conclusion
 
@@ -158,6 +173,7 @@ To match Edge Gallery, the likely required work is one of:
 1. Publish/use an E4B artifact exported like Edge Gallery's model, with smaller GPU-compatible main signatures such as `prefill_16` and `prefill_256`.
 2. Add upstream LiteRT/LiteRT-LM support for compiling only the signatures that will actually be used, or for lazily compiling signatures instead of compiling the whole `tf_lite_prefill_decode` section in `CompiledModel::Create`.
 3. Investigate whether a newer internal LiteRT GPU compiler/runtime has memory behavior that the public LiteRT-LM source does not yet have.
+4. Test the upstream memory-reduction change `da1f1ceb` (`Reduce peak memory footprint by unmapping TFLite FlatBuffer for fully accelerated models`) from the LiteRT-LM remote branches. That change is not in the current local source baseline and directly targets peak memory after hardware compilation.
 
 The local package now exposes `LITERT_LM_PREFILL_BATCH_SIZES` for diagnostics and for models that do carry prefill-length magic numbers. It does not fix this public E4B artifact because that artifact exposes no prefill-length magic numbers for LiteRT to rewrite.
 
@@ -210,4 +226,9 @@ These files were generated during the investigation and may exist only in the lo
 .worktree/e4b-16pm-diag-main-fp16-img1.log
 .worktree/e4b-16pm-diag-main-fp16-max512-img1.log
 .worktree/e4b-16pm-diag-main-gpu-fp16-vision-cpu-max512.log
+.worktree/e4b-16pm-diag-main-fp16-max512-img1-vision-convert-off.log
+.worktree/e4b-16pm-diag-main-fp16-max512-img1-vision-cache-shaders-only.log
+.worktree/e4b-16pm-diag-main-fp16-max512-img1-vision-share-off.log
+.worktree/e4b-16pm-diag-main-fp16-max512-img1-vision-madvise-off.log
+.worktree/e4b-16pm-diag-main-fp16-vision-fp16-max512-img1.log
 ```

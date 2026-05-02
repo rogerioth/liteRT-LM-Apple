@@ -418,6 +418,21 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_advanced_bool(
     LiteRtLmEngineSettings* settings, int option, bool value);
 
+// Sets a boolean GPU diagnostic setting on the vision executor.
+//
+// Supported options are:
+// kLiteRtLmAdvancedMadviseOriginalSharedTensors,
+// kLiteRtLmAdvancedConvertWeightsOnGpu,
+// kLiteRtLmAdvancedCacheCompiledShadersOnly, and
+// kLiteRtLmAdvancedShareConstantTensors.
+//
+// @param settings The engine settings.
+// @param option The LiteRtLmAdvancedBoolOption value to set.
+// @param value The setting value.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_vision_gpu_bool(
+    LiteRtLmEngineSettings* settings, int option, bool value);
+
 // Sets GPU external tensor mode on the main executor.
 //
 // @param settings The engine settings.
