@@ -248,6 +248,15 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
     const char* model_path, const char* backend_str,
     const char* vision_backend_str, const char* audio_backend_str);
 
+// Sets the directory where LiteRT should look for runtime plugin libraries,
+// such as libLiteRtMetalAccelerator.dylib.
+//
+// @param settings The engine settings.
+// @param runtime_library_dir The directory containing LiteRT runtime plugins.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_runtime_library_dir(
+    LiteRtLmEngineSettings* settings, const char* runtime_library_dir);
+
 // Destroys LiteRT LM Engine Settings.
 //
 // @param settings The settings to destroy.
