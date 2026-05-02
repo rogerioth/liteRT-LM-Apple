@@ -31,4 +31,9 @@ if ! grep -q "LITERT_LM_CPU_KERNEL_MODE" "${runtime_file}"; then
   exit 1
 fi
 
+if ! grep -q "defaultCPUKernelModeName" "${runtime_file}"; then
+  echo "FAIL: example runtime is missing the E4B vision-GPU CPU-kernel fallback." >&2
+  exit 1
+fi
+
 echo "PASS: LiteRT-LM patch configures the GPU runtime library directory."

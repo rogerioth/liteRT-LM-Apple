@@ -74,6 +74,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         ConsoleLog.debug("Ensured runtime cache directory exists.", category: "Runtime")
 
         let backendName = environment["LITERT_LM_BACKEND"] ?? "cpu"
+        let normalizedBackendName = backendName.trimmingCharacters(in: .whitespacesAndNewlines)
         let visionBackendName = environment["LITERT_LM_VISION_BACKEND"] ?? "cpu"
         let normalizedVisionBackendName = visionBackendName.trimmingCharacters(in: .whitespacesAndNewlines)
         let usesVisionBackend = !normalizedVisionBackendName.isEmpty
@@ -134,7 +135,12 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             litert_lm_engine_settings_set_prefill_chunk_size(settings, prefillChunkSize)
         }
 
-        let cpuKernelModeName = environment["LITERT_LM_CPU_KERNEL_MODE"]
+        let defaultCPUKernelModeName = Self.defaultCPUKernelModeName(
+            modelURL: modelURL,
+            backendName: normalizedBackendName,
+            visionBackendName: usesVisionBackend ? normalizedVisionBackendName : nil
+        )
+        let cpuKernelModeName = environment["LITERT_LM_CPU_KERNEL_MODE"] ?? defaultCPUKernelModeName
         if let cpuKernelMode = Self.cpuKernelModeValue(cpuKernelModeName) {
             litert_lm_engine_settings_set_cpu_kernel_mode(settings, cpuKernelMode)
         } else if let cpuKernelModeName, !cpuKernelModeName.isEmpty {
@@ -313,6 +319,18 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         }
 
         return normalizedText
+    }
+
+    private static func defaultCPUKernelModeName(
+        modelURL: URL,
+        backendName: String,
+        visionBackendName: String?
+    ) -> String? {
+        let usesMainCPU = backendName.lowercased() == "cpu"
+        let usesVisionGPU = visionBackendName?.lowercased() == "gpu"
+        let modelName = modelURL.lastPathComponent.lowercased()
+        guard usesMainCPU, usesVisionGPU, modelName.contains("e4b") else { return nil }
+        return "builtin"
     }
 
     private static func cpuKernelModeValue(_ value: String?) -> Int32? {
