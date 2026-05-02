@@ -27,6 +27,20 @@ index 4e157c2f..5ec6a371 100644
  cc_test(
      name = "engine_test",
      srcs = ["engine_test.cc"],
+diff --git a/WORKSPACE b/WORKSPACE
+--- a/WORKSPACE
++++ b/WORKSPACE
+@@ -441,7 +441,9 @@ load("@rules_android_ndk//:rules.bzl", "android_ndk_repository")
+ 
+ android_ndk_repository(name = "androidndk")
+ 
+-android_sdk_repository(name = "androidsdk")
++# The Apple package build does not use Android targets. The upstream
++# unconditional SDK repository fails on machines without an Android SDK.
++# android_sdk_repository(name = "androidsdk")
+ 
+ # Configure Android NDK only when ANDROID_NDK_HOME is set.
+ # Creates current_android_ndk_env.bzl as a workaround since shell environment is available only
 diff --git a/c/engine.cc b/c/engine.cc
 index 28b8518c..3cf22c78 100644
 --- a/c/engine.cc
