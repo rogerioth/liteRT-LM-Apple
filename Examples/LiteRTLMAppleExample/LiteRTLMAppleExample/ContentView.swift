@@ -319,6 +319,10 @@ struct ContentView: View {
 
         do {
             let rawData = try Data(contentsOf: url)
+            ConsoleLog.info(
+                "Loaded image candidate from \(url.path) raw_bytes=\(rawData.count).",
+                category: "ViewModel"
+            )
             let normalized = try ImageDataNormalizer.makeJPEGData(from: rawData)
             await MainActor.run { viewModel.attachImage(normalized) }
         } catch {

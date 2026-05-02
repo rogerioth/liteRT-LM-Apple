@@ -4,6 +4,12 @@ import SwiftUI
 struct LiteRTLMAppleExampleApp: App {
     @StateObject private var viewModel = InferenceViewModel()
 
+    init() {
+#if DEBUG
+        SmokeTestRunner.runIfRequested()
+#endif
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView(viewModel: viewModel)

@@ -61,19 +61,40 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             category: "Runtime"
         )
         ConsoleLog.debug("Prompt preview=\(ConsoleLog.preview(inputs.prompt)).", category: "Runtime")
+#if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+#else
+        let environment: [String: String] = [:]
+#endif
         // 0=VERBOSE, 1=DEBUG, 2=INFO, 3=WARNING, 4=ERROR, 5=FATAL, 1000=SILENT.
-        litert_lm_set_min_log_level(3)
+        let minLogLevel = environment["LITERT_LM_MIN_LOG_LEVEL"].flatMap(Int32.init) ?? 3
+        litert_lm_set_min_log_level(minLogLevel)
 
         try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
         ConsoleLog.debug("Ensured runtime cache directory exists.", category: "Runtime")
 
+        let backendName = environment["LITERT_LM_BACKEND"] ?? "cpu"
+        let visionBackendName = environment["LITERT_LM_VISION_BACKEND"] ?? "cpu"
+        let normalizedVisionBackendName = visionBackendName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let usesVisionBackend = !normalizedVisionBackendName.isEmpty
+            && normalizedVisionBackendName.lowercased() != "none"
+
         let settings = modelURL.path.withCString { modelPathPointer in
-            "cpu".withCString { backendPointer in
-                "cpu".withCString { visionBackendPointer in
-                    litert_lm_engine_settings_create(
+            backendName.withCString { backendPointer in
+                if usesVisionBackend {
+                    return normalizedVisionBackendName.withCString { visionBackendPointer in
+                        litert_lm_engine_settings_create(
+                            modelPathPointer,
+                            backendPointer,
+                            visionBackendPointer,
+                            nil
+                        )
+                    }
+                } else {
+                    return litert_lm_engine_settings_create(
                         modelPathPointer,
                         backendPointer,
-                        visionBackendPointer,
+                        nil,
                         nil
                     )
                 }
@@ -84,12 +105,36 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             throw LiteRTLMRuntimeError("Failed to create LiteRT-LM engine settings.")
         }
         defer { litert_lm_engine_settings_delete(settings) }
-        ConsoleLog.info("Created engine settings for CPU backend.", category: "Runtime")
+        ConsoleLog.info(
+            "Created engine settings backend=\(backendName) vision_backend=\(usesVisionBackend ? normalizedVisionBackendName : "none").",
+            category: "Runtime"
+        )
 
-        litert_lm_engine_settings_set_max_num_images(settings, 1)
-        litert_lm_engine_settings_enable_benchmark(settings)
+        let maxNumImages = environment["LITERT_LM_MAX_NUM_IMAGES"].flatMap(Int32.init) ?? 1
+        litert_lm_engine_settings_set_max_num_images(settings, maxNumImages)
+
+        if let activationDataType = environment["LITERT_LM_ACTIVATION_DATA_TYPE"].flatMap(Int32.init) {
+            litert_lm_engine_settings_set_activation_data_type(settings, activationDataType)
+        }
+
+        if let maxNumTokens = environment["LITERT_LM_MAX_NUM_TOKENS"].flatMap(Int32.init) {
+            litert_lm_engine_settings_set_max_num_tokens(settings, maxNumTokens)
+        }
+
+        if let prefillChunkSize = environment["LITERT_LM_PREFILL_CHUNK_SIZE"].flatMap(Int32.init) {
+            litert_lm_engine_settings_set_prefill_chunk_size(settings, prefillChunkSize)
+        }
+
+        if let parallelLoading = environment["LITERT_LM_PARALLEL_LOADING"].flatMap(Bool.init) {
+            litert_lm_engine_settings_set_parallel_file_section_loading(settings, parallelLoading)
+        }
+
+        let benchmarkEnabled = environment["LITERT_LM_BENCHMARK"].flatMap(Bool.init) ?? true
+        if benchmarkEnabled {
+            litert_lm_engine_settings_enable_benchmark(settings)
+        }
         ConsoleLog.debug(
-            "Applied engine settings: max_num_images=1 benchmark=enabled (max_num_tokens / prefill_chunk_size left to model heuristics).",
+            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(environment["LITERT_LM_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(environment["LITERT_LM_MAX_NUM_TOKENS"] ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled").",
             category: "Runtime"
         )
 

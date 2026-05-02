@@ -29,6 +29,8 @@ enum ImageDataNormalizer {
         else {
             throw NormalizationError.decodeFailed
         }
+        let width = cgImage.width
+        let height = cgImage.height
 
         let mutableData = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
@@ -49,6 +51,11 @@ enum ImageDataNormalizer {
             throw NormalizationError.encodeFailed
         }
 
-        return mutableData as Data
+        let normalizedData = mutableData as Data
+        ConsoleLog.info(
+            "Normalized attached image raw_bytes=\(rawData.count) jpeg_bytes=\(normalizedData.count) dimensions=\(width)x\(height) quality=\(compressionQuality).",
+            category: "ImageNormalizer"
+        )
+        return normalizedData
     }
 }
