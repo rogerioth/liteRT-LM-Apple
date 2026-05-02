@@ -123,6 +123,7 @@ no tf_lite_mtp_drafter section observed
 Observed main-GPU outcomes:
 
 - `backend=gpu vision_backend=gpu max_tokens=4000 max_num_images=10`: failed during main GPU `CompiledModel::Create` with `Failed to allocate id<MTLTexture>`.
+- After exposing the remaining upstream GPU diagnostics, the iPhone 16 Pro Max baseline still failed in the same phase. It initialized `decode` and `prefill_1024` from serialized GPU data, then failed allocating a Metal texture while preparing the `prefill_128` signature. This confirms the failure is in eager main-model GPU signature compilation, before image-specific vision inference.
 - `prefill_batch_sizes=16,256`: setting was applied, but LiteRT logged `Too many prefill batch sizes=2 for magic numbers of prefill lengths=0`, kept `prefill_1024` and `prefill_128`, and failed the same way.
 - `activation_data_type=FLOAT16`: main GPU compilation progressed, then the process crashed while bringing up the E4B vision path.
 - `max_tokens=2048 max_num_images=1`: main GPU compiled, but the per-layer embedder mmap failed and the vision encoder failed to allocate Metal textures.
@@ -153,6 +154,28 @@ To match Edge Gallery, the likely required work is one of:
 
 The local package now exposes `LITERT_LM_PREFILL_BATCH_SIZES` for diagnostics and for models that do carry prefill-length magic numbers. It does not fix this public E4B artifact because that artifact exposes no prefill-length magic numbers for LiteRT to rewrite.
 
+The local package also exposes these diagnostic switches so future test runs can isolate upstream LiteRT GPU behavior without rebuilding:
+
+```text
+LITERT_LM_MAIN_ACTIVATION_DATA_TYPE
+LITERT_LM_VISION_ACTIVATION_DATA_TYPE
+LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE
+LITERT_LM_GPU_EXTERNAL_TENSOR_MODE
+LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE
+LITERT_LM_CLEAR_KV_CACHE_BEFORE_PREFILL
+LITERT_LM_GPU_MADVISE_ORIGINAL_SHARED_TENSORS
+LITERT_LM_GPU_CONVERT_WEIGHTS_ON_GPU
+LITERT_LM_GPU_WAIT_FOR_WEIGHTS_CONVERSION_COMPLETE_IN_BENCHMARK
+LITERT_LM_GPU_OPTIMIZE_SHADER_COMPILATION
+LITERT_LM_GPU_CACHE_COMPILED_SHADERS_ONLY
+LITERT_LM_GPU_SHARE_CONSTANT_TENSORS
+LITERT_LM_SAMPLER_HANDLES_INPUT
+LITERT_LM_GPU_ALLOW_SRC_QUANTIZED_FC_CONV_OPS
+LITERT_LM_GPU_HINT_WAITING_FOR_COMPLETION
+LITERT_LM_GPU_CONTEXT_LOW_PRIORITY
+LITERT_LM_GPU_DISABLE_DELEGATE_CLUSTERING
+```
+
 ## Useful local log artifacts
 
 These files were generated during the investigation and may exist only in the local worktree:
@@ -169,4 +192,5 @@ These files were generated during the investigation and may exist only in the lo
 .worktree/e4b-16pm-main-gpu-vision-gpu-max2048-img1.log
 .worktree/e4b-16pm-main-gpu-vision-gpu-max1024-img1.log
 .worktree/e4b-16pm-main-gpu-vision-gpu-max512-img1.log
+.worktree/e4b-16pm-diag-baseline-gpu.log
 ```

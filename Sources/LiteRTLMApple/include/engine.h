@@ -111,6 +111,22 @@ typedef struct {
   int32_t seed;
 } LiteRtLmSamplerParams;
 
+// Boolean advanced settings exposed for GPU/runtime diagnostics.
+typedef enum {
+  kLiteRtLmAdvancedClearKvCacheBeforePrefill = 0,
+  kLiteRtLmAdvancedMadviseOriginalSharedTensors = 1,
+  kLiteRtLmAdvancedConvertWeightsOnGpu = 2,
+  kLiteRtLmAdvancedWaitForWeightsConversionCompleteInBenchmark = 3,
+  kLiteRtLmAdvancedOptimizeShaderCompilation = 4,
+  kLiteRtLmAdvancedCacheCompiledShadersOnly = 5,
+  kLiteRtLmAdvancedShareConstantTensors = 6,
+  kLiteRtLmAdvancedSamplerHandlesInput = 7,
+  kLiteRtLmAdvancedAllowSrcQuantizedFcConvOps = 8,
+  kLiteRtLmAdvancedHintWaitingForCompletion = 9,
+  kLiteRtLmAdvancedGpuContextLowPriority = 10,
+  kLiteRtLmAdvancedDisableDelegateClustering = 11,
+} LiteRtLmAdvancedBoolOption;
+
 // Creates a LiteRT LM Session Config.
 // The caller is responsible for destroying the config using
 // `litert_lm_session_config_delete`.
@@ -319,6 +335,30 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_activation_data_type(
     LiteRtLmEngineSettings* settings, int activation_data_type_int);
 
+// Sets the activation data type for the main executor only.
+//
+// @param settings The engine settings.
+// @param activation_data_type_int The activation data type.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_main_activation_data_type(
+    LiteRtLmEngineSettings* settings, int activation_data_type_int);
+
+// Sets the activation data type for the vision executor only, if present.
+//
+// @param settings The engine settings.
+// @param activation_data_type_int The activation data type.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_vision_activation_data_type(
+    LiteRtLmEngineSettings* settings, int activation_data_type_int);
+
+// Sets the activation data type for the audio executor only, if present.
+//
+// @param settings The engine settings.
+// @param activation_data_type_int The activation data type.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_audio_activation_data_type(
+    LiteRtLmEngineSettings* settings, int activation_data_type_int);
+
 // Sets the prefill chunk size for the engine. Only applicable for CPU backend
 // with dynamic models.
 //
@@ -368,6 +408,32 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_prefill_batch_sizes(
     LiteRtLmEngineSettings* settings, const int* prefill_batch_sizes,
     int count);
+
+// Sets a boolean advanced setting on the main executor.
+//
+// @param settings The engine settings.
+// @param option The LiteRtLmAdvancedBoolOption value to set.
+// @param value The setting value.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_advanced_bool(
+    LiteRtLmEngineSettings* settings, int option, bool value);
+
+// Sets GPU external tensor mode on the main executor.
+//
+// @param settings The engine settings.
+// @param external_tensor_mode Whether to use external tensor mode.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_gpu_external_tensor_mode(
+    LiteRtLmEngineSettings* settings, bool external_tensor_mode);
+
+// Sets or clears the GPU hint kernel batch size on the main executor. Values
+// greater than zero set the hint; values less than or equal to zero clear it.
+//
+// @param settings The engine settings.
+// @param hint_kernel_batch_size The kernel batch size hint.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_gpu_hint_kernel_batch_size(
+    LiteRtLmEngineSettings* settings, int hint_kernel_batch_size);
 
 // Creates a LiteRT LM Engine from the given settings. The caller is responsible
 // for destroying the engine using `litert_lm_engine_delete`.

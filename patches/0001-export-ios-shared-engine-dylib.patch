@@ -43,7 +43,7 @@ index 4e157c2f..d02c85d1 100644
      name = "engine_test",
      srcs = ["engine_test.cc"],
 diff --git a/c/engine.cc b/c/engine.cc
-index 28b8518c..e84737ce 100644
+index 28b8518c..f05f40d1 100644
 --- a/c/engine.cc
 +++ b/c/engine.cc
 @@ -29,6 +29,7 @@
@@ -118,7 +118,7 @@ index 28b8518c..e84737ce 100644
    }
  }
  
-@@ -445,11 +482,44 @@ void litert_lm_engine_settings_set_enable_speculative_decoding(
+@@ -445,11 +482,170 @@ void litert_lm_engine_settings_set_enable_speculative_decoding(
    }
  }
  
@@ -144,13 +144,103 @@ index 28b8518c..e84737ce 100644
 +  main_settings.SetAdvancedSettings(advanced_settings);
 +}
 +
++void litert_lm_engine_settings_set_advanced_bool(
++    LiteRtLmEngineSettings* settings, int option, bool value) {
++  if (!settings || !settings->settings) {
++    return;
++  }
++
++  auto& main_settings = settings->settings->GetMutableMainExecutorSettings();
++  auto advanced_settings = main_settings.GetAdvancedSettings().value_or(
++      litert::lm::AdvancedSettings());
++
++  switch (static_cast<LiteRtLmAdvancedBoolOption>(option)) {
++    case kLiteRtLmAdvancedClearKvCacheBeforePrefill:
++      advanced_settings.clear_kv_cache_before_prefill = value;
++      break;
++    case kLiteRtLmAdvancedMadviseOriginalSharedTensors:
++      advanced_settings.gpu_madvise_original_shared_tensors = value;
++      break;
++    case kLiteRtLmAdvancedConvertWeightsOnGpu:
++      advanced_settings.convert_weights_on_gpu = value;
++      break;
++    case kLiteRtLmAdvancedWaitForWeightsConversionCompleteInBenchmark:
++      advanced_settings.wait_for_weights_conversion_complete_in_benchmark =
++          value;
++      break;
++    case kLiteRtLmAdvancedOptimizeShaderCompilation:
++      advanced_settings.optimize_shader_compilation = value;
++      break;
++    case kLiteRtLmAdvancedCacheCompiledShadersOnly:
++      advanced_settings.cache_compiled_shaders_only = value;
++      break;
++    case kLiteRtLmAdvancedShareConstantTensors:
++      advanced_settings.share_constant_tensors = value;
++      break;
++    case kLiteRtLmAdvancedSamplerHandlesInput:
++      advanced_settings.sampler_handles_input = value;
++      break;
++    case kLiteRtLmAdvancedAllowSrcQuantizedFcConvOps:
++      advanced_settings.allow_src_quantized_fc_conv_ops = value;
++      break;
++    case kLiteRtLmAdvancedHintWaitingForCompletion:
++      advanced_settings.hint_waiting_for_completion = value;
++      break;
++    case kLiteRtLmAdvancedGpuContextLowPriority:
++      advanced_settings.gpu_context_low_priority = value;
++      break;
++    case kLiteRtLmAdvancedDisableDelegateClustering:
++      advanced_settings.disable_delegate_clustering = value;
++      break;
++    default:
++      ABSL_LOG(WARNING) << "Ignoring invalid advanced bool option: " << option;
++      return;
++  }
++
++  main_settings.SetAdvancedSettings(advanced_settings);
++}
++
++void litert_lm_engine_settings_set_gpu_external_tensor_mode(
++    LiteRtLmEngineSettings* settings, bool external_tensor_mode) {
++  if (!settings || !settings->settings) {
++    return;
++  }
++
++  auto& main_settings = settings->settings->GetMutableMainExecutorSettings();
++  auto config = main_settings.MutableBackendConfig<litert::lm::GpuConfig>();
++  if (!config.ok()) {
++    ABSL_LOG(WARNING)
++        << "Failed to get GpuConfig to set external tensor mode: "
++        << config.status();
++    return;
++  }
++  config->external_tensor_mode = external_tensor_mode;
++  main_settings.SetBackendConfig(*config);
++}
++
++void litert_lm_engine_settings_set_gpu_hint_kernel_batch_size(
++    LiteRtLmEngineSettings* settings, int hint_kernel_batch_size) {
++  if (!settings || !settings->settings) {
++    return;
++  }
++
++  auto& main_settings = settings->settings->GetMutableMainExecutorSettings();
++  auto advanced_settings = main_settings.GetAdvancedSettings().value_or(
++      litert::lm::AdvancedSettings());
++  if (hint_kernel_batch_size > 0) {
++    advanced_settings.hint_kernel_batch_size = hint_kernel_batch_size;
++  } else {
++    advanced_settings.hint_kernel_batch_size.reset();
++  }
++  main_settings.SetAdvancedSettings(advanced_settings);
++}
++
  void litert_lm_engine_settings_set_activation_data_type(
      LiteRtLmEngineSettings* settings, int activation_data_type_int) {
    if (settings && settings->settings) {
 +    auto activation_data_type =
 +        static_cast<litert::lm::ActivationDataType>(activation_data_type_int);
-     settings->settings->GetMutableMainExecutorSettings().SetActivationDataType(
--        static_cast<litert::lm::ActivationDataType>(activation_data_type_int));
++    settings->settings->GetMutableMainExecutorSettings().SetActivationDataType(
 +        activation_data_type);
 +    auto& vision_settings =
 +        settings->settings->GetMutableVisionExecutorSettings();
@@ -161,10 +251,46 @@ index 28b8518c..e84737ce 100644
 +    if (audio_settings.has_value()) {
 +      audio_settings->SetActivationDataType(activation_data_type);
 +    }
++  }
++}
++
++void litert_lm_engine_settings_set_main_activation_data_type(
++    LiteRtLmEngineSettings* settings, int activation_data_type_int) {
++  if (settings && settings->settings) {
++    auto activation_data_type =
++        static_cast<litert::lm::ActivationDataType>(activation_data_type_int);
+     settings->settings->GetMutableMainExecutorSettings().SetActivationDataType(
+-        static_cast<litert::lm::ActivationDataType>(activation_data_type_int));
++        activation_data_type);
++  }
++}
++
++void litert_lm_engine_settings_set_vision_activation_data_type(
++    LiteRtLmEngineSettings* settings, int activation_data_type_int) {
++  if (settings && settings->settings) {
++    auto activation_data_type =
++        static_cast<litert::lm::ActivationDataType>(activation_data_type_int);
++    auto& vision_settings =
++        settings->settings->GetMutableVisionExecutorSettings();
++    if (vision_settings.has_value()) {
++      vision_settings->SetActivationDataType(activation_data_type);
++    }
++  }
++}
++
++void litert_lm_engine_settings_set_audio_activation_data_type(
++    LiteRtLmEngineSettings* settings, int activation_data_type_int) {
++  if (settings && settings->settings) {
++    auto activation_data_type =
++        static_cast<litert::lm::ActivationDataType>(activation_data_type_int);
++    auto& audio_settings = settings->settings->GetMutableAudioExecutorSettings();
++    if (audio_settings.has_value()) {
++      audio_settings->SetActivationDataType(activation_data_type);
++    }
    }
  }
  
-@@ -468,6 +538,34 @@ void litert_lm_engine_settings_set_prefill_chunk_size(
+@@ -468,6 +664,34 @@ void litert_lm_engine_settings_set_prefill_chunk_size(
    }
  }
  
@@ -200,10 +326,33 @@ index 28b8518c..e84737ce 100644
      const LiteRtLmEngineSettings* settings) {
    if (!settings || !settings->settings) {
 diff --git a/c/engine.h b/c/engine.h
-index aa1eec8b..3f53c4a1 100644
+index aa1eec8b..6de1f8b2 100644
 --- a/c/engine.h
 +++ b/c/engine.h
-@@ -248,6 +248,15 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
+@@ -111,6 +111,22 @@ typedef struct {
+   int32_t seed;
+ } LiteRtLmSamplerParams;
+ 
++// Boolean advanced settings exposed for GPU/runtime diagnostics.
++typedef enum {
++  kLiteRtLmAdvancedClearKvCacheBeforePrefill = 0,
++  kLiteRtLmAdvancedMadviseOriginalSharedTensors = 1,
++  kLiteRtLmAdvancedConvertWeightsOnGpu = 2,
++  kLiteRtLmAdvancedWaitForWeightsConversionCompleteInBenchmark = 3,
++  kLiteRtLmAdvancedOptimizeShaderCompilation = 4,
++  kLiteRtLmAdvancedCacheCompiledShadersOnly = 5,
++  kLiteRtLmAdvancedShareConstantTensors = 6,
++  kLiteRtLmAdvancedSamplerHandlesInput = 7,
++  kLiteRtLmAdvancedAllowSrcQuantizedFcConvOps = 8,
++  kLiteRtLmAdvancedHintWaitingForCompletion = 9,
++  kLiteRtLmAdvancedGpuContextLowPriority = 10,
++  kLiteRtLmAdvancedDisableDelegateClustering = 11,
++} LiteRtLmAdvancedBoolOption;
++
+ // Creates a LiteRT LM Session Config.
+ // The caller is responsible for destroying the config using
+ // `litert_lm_session_config_delete`.
+@@ -248,6 +264,15 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
      const char* model_path, const char* backend_str,
      const char* vision_backend_str, const char* audio_backend_str);
  
@@ -219,7 +368,7 @@ index aa1eec8b..3f53c4a1 100644
  // Destroys LiteRT LM Engine Settings.
  //
  // @param settings The settings to destroy.
-@@ -262,6 +271,27 @@ LITERT_LM_C_API_EXPORT
+@@ -262,6 +287,27 @@ LITERT_LM_C_API_EXPORT
  void litert_lm_engine_settings_set_max_num_tokens(
      LiteRtLmEngineSettings* settings, int max_num_tokens);
  
@@ -247,7 +396,38 @@ index aa1eec8b..3f53c4a1 100644
  // Sets whether the engine should load different sections of the litertlm file
  // in parallel. Defaults to true.
  //
-@@ -329,6 +359,16 @@ LITERT_LM_C_API_EXPORT
+@@ -289,6 +335,30 @@ LITERT_LM_C_API_EXPORT
+ void litert_lm_engine_settings_set_activation_data_type(
+     LiteRtLmEngineSettings* settings, int activation_data_type_int);
+ 
++// Sets the activation data type for the main executor only.
++//
++// @param settings The engine settings.
++// @param activation_data_type_int The activation data type.
++LITERT_LM_C_API_EXPORT
++void litert_lm_engine_settings_set_main_activation_data_type(
++    LiteRtLmEngineSettings* settings, int activation_data_type_int);
++
++// Sets the activation data type for the vision executor only, if present.
++//
++// @param settings The engine settings.
++// @param activation_data_type_int The activation data type.
++LITERT_LM_C_API_EXPORT
++void litert_lm_engine_settings_set_vision_activation_data_type(
++    LiteRtLmEngineSettings* settings, int activation_data_type_int);
++
++// Sets the activation data type for the audio executor only, if present.
++//
++// @param settings The engine settings.
++// @param activation_data_type_int The activation data type.
++LITERT_LM_C_API_EXPORT
++void litert_lm_engine_settings_set_audio_activation_data_type(
++    LiteRtLmEngineSettings* settings, int activation_data_type_int);
++
+ // Sets the prefill chunk size for the engine. Only applicable for CPU backend
+ // with dynamic models.
+ //
+@@ -329,6 +399,42 @@ LITERT_LM_C_API_EXPORT
  void litert_lm_engine_settings_set_enable_speculative_decoding(
      LiteRtLmEngineSettings* settings, bool enable_speculative_decoding);
  
@@ -261,14 +441,40 @@ index aa1eec8b..3f53c4a1 100644
 +    LiteRtLmEngineSettings* settings, const int* prefill_batch_sizes,
 +    int count);
 +
++// Sets a boolean advanced setting on the main executor.
++//
++// @param settings The engine settings.
++// @param option The LiteRtLmAdvancedBoolOption value to set.
++// @param value The setting value.
++LITERT_LM_C_API_EXPORT
++void litert_lm_engine_settings_set_advanced_bool(
++    LiteRtLmEngineSettings* settings, int option, bool value);
++
++// Sets GPU external tensor mode on the main executor.
++//
++// @param settings The engine settings.
++// @param external_tensor_mode Whether to use external tensor mode.
++LITERT_LM_C_API_EXPORT
++void litert_lm_engine_settings_set_gpu_external_tensor_mode(
++    LiteRtLmEngineSettings* settings, bool external_tensor_mode);
++
++// Sets or clears the GPU hint kernel batch size on the main executor. Values
++// greater than zero set the hint; values less than or equal to zero clear it.
++//
++// @param settings The engine settings.
++// @param hint_kernel_batch_size The kernel batch size hint.
++LITERT_LM_C_API_EXPORT
++void litert_lm_engine_settings_set_gpu_hint_kernel_batch_size(
++    LiteRtLmEngineSettings* settings, int hint_kernel_batch_size);
++
  // Creates a LiteRT LM Engine from the given settings. The caller is responsible
  // for destroying the engine using `litert_lm_engine_delete`.
  //
 diff --git a/c/engine_test.cc b/c/engine_test.cc
-index 4b422028..9f8180d6 100644
+index 4b422028..db33294b 100644
 --- a/c/engine_test.cc
 +++ b/c/engine_test.cc
-@@ -227,6 +227,26 @@ TEST(EngineCTest, SetEnableSpeculativeDecoding) {
+@@ -227,6 +227,127 @@ TEST(EngineCTest, SetEnableSpeculativeDecoding) {
                     .enable_speculative_decoding);
  }
  
@@ -290,6 +496,107 @@ index 4b422028..9f8180d6 100644
 +  ASSERT_TRUE(advanced_settings.has_value());
 +  EXPECT_THAT(advanced_settings->prefill_batch_sizes,
 +              ::testing::ElementsAre(16, 256));
++}
++
++TEST(EngineCTest, SetAdvancedBool) {
++  const std::string task_path = "test_model_path_1";
++  EngineSettingsPtr settings(
++      litert_lm_engine_settings_create(task_path.c_str(), "gpu",
++                                       /* vision_backend_str */ nullptr,
++                                       /* audio_backend_str */ nullptr),
++      &litert_lm_engine_settings_delete);
++  ASSERT_NE(settings, nullptr);
++
++  litert_lm_engine_settings_set_advanced_bool(
++      settings.get(), kLiteRtLmAdvancedConvertWeightsOnGpu, false);
++  litert_lm_engine_settings_set_advanced_bool(
++      settings.get(), kLiteRtLmAdvancedShareConstantTensors, false);
++  litert_lm_engine_settings_set_advanced_bool(
++      settings.get(), kLiteRtLmAdvancedAllowSrcQuantizedFcConvOps, false);
++  litert_lm_engine_settings_set_advanced_bool(
++      settings.get(), kLiteRtLmAdvancedHintWaitingForCompletion, true);
++  litert_lm_engine_settings_set_advanced_bool(
++      settings.get(), kLiteRtLmAdvancedGpuContextLowPriority, true);
++
++  const auto advanced_settings =
++      settings->settings->GetMainExecutorSettings().GetAdvancedSettings();
++  ASSERT_TRUE(advanced_settings.has_value());
++  EXPECT_FALSE(advanced_settings->convert_weights_on_gpu);
++  EXPECT_FALSE(advanced_settings->share_constant_tensors);
++  ASSERT_TRUE(advanced_settings->allow_src_quantized_fc_conv_ops.has_value());
++  EXPECT_FALSE(advanced_settings->allow_src_quantized_fc_conv_ops.value());
++  ASSERT_TRUE(advanced_settings->hint_waiting_for_completion.has_value());
++  EXPECT_TRUE(advanced_settings->hint_waiting_for_completion.value());
++  ASSERT_TRUE(advanced_settings->gpu_context_low_priority.has_value());
++  EXPECT_TRUE(advanced_settings->gpu_context_low_priority.value());
++}
++
++TEST(EngineCTest, SetGpuExternalTensorMode) {
++  const std::string task_path = "test_model_path_1";
++  EngineSettingsPtr settings(
++      litert_lm_engine_settings_create(task_path.c_str(), "gpu",
++                                       /* vision_backend_str */ nullptr,
++                                       /* audio_backend_str */ nullptr),
++      &litert_lm_engine_settings_delete);
++  ASSERT_NE(settings, nullptr);
++
++  litert_lm_engine_settings_set_gpu_external_tensor_mode(settings.get(), true);
++  auto config = settings->settings->GetMainExecutorSettings()
++                    .GetBackendConfig<litert::lm::GpuConfig>();
++  ASSERT_TRUE(config.ok());
++  EXPECT_TRUE(config->external_tensor_mode);
++}
++
++TEST(EngineCTest, SetGpuHintKernelBatchSize) {
++  const std::string task_path = "test_model_path_1";
++  EngineSettingsPtr settings(
++      litert_lm_engine_settings_create(task_path.c_str(), "gpu",
++                                       /* vision_backend_str */ nullptr,
++                                       /* audio_backend_str */ nullptr),
++      &litert_lm_engine_settings_delete);
++  ASSERT_NE(settings, nullptr);
++
++  litert_lm_engine_settings_set_gpu_hint_kernel_batch_size(settings.get(), 8);
++  auto advanced_settings =
++      settings->settings->GetMainExecutorSettings().GetAdvancedSettings();
++  ASSERT_TRUE(advanced_settings.has_value());
++  ASSERT_TRUE(advanced_settings->hint_kernel_batch_size.has_value());
++  EXPECT_EQ(advanced_settings->hint_kernel_batch_size.value(), 8);
++
++  litert_lm_engine_settings_set_gpu_hint_kernel_batch_size(settings.get(), 0);
++  advanced_settings =
++      settings->settings->GetMainExecutorSettings().GetAdvancedSettings();
++  ASSERT_TRUE(advanced_settings.has_value());
++  EXPECT_FALSE(advanced_settings->hint_kernel_batch_size.has_value());
++}
++
++TEST(EngineCTest, SetExecutorActivationDataTypesSeparately) {
++  const std::string task_path = "test_model_path_1";
++  EngineSettingsPtr settings(
++      litert_lm_engine_settings_create(task_path.c_str(), "gpu",
++                                       /* vision_backend_str */ "gpu",
++                                       /* audio_backend_str */ "cpu"),
++      &litert_lm_engine_settings_delete);
++  ASSERT_NE(settings, nullptr);
++
++  litert_lm_engine_settings_set_main_activation_data_type(settings.get(), 1);
++  litert_lm_engine_settings_set_vision_activation_data_type(settings.get(), 0);
++  litert_lm_engine_settings_set_audio_activation_data_type(settings.get(), 2);
++
++  EXPECT_EQ(settings->settings->GetMainExecutorSettings()
++                .GetActivationDataType()
++                .value(),
++            litert::lm::ActivationDataType::FLOAT16);
++  ASSERT_TRUE(settings->settings->GetVisionExecutorSettings().has_value());
++  EXPECT_EQ(settings->settings->GetVisionExecutorSettings()
++                ->GetActivationDataType()
++                .value(),
++            litert::lm::ActivationDataType::FLOAT32);
++  ASSERT_TRUE(settings->settings->GetAudioExecutorSettings().has_value());
++  EXPECT_EQ(settings->settings->GetAudioExecutorSettings()
++                ->GetActivationDataType()
++                .value(),
++            litert::lm::ActivationDataType::INT16);
 +}
 +
  TEST(EngineCTest, CreateSessionConfigWithSamplerParams) {
