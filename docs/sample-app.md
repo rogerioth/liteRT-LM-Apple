@@ -27,7 +27,7 @@ These models are pinned in `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/M
 - `InferenceViewModel.swift`: presentation state and action orchestration
 - `ModelStore.swift`: local file management and model downloads
 - `LiteRTLMRuntime.swift`: the Swift wrapper around the LiteRT-LM C API
-- `ImageDataNormalizer.swift`: JPEG normalization for Photos picker output, including HEIC inputs
+- `ImageDataNormalizer.swift`: EXIF-aware 1024px JPEG normalization for Photos picker output, including HEIC inputs
 - `PhaseTiming.swift`: app-side wall-clock timing for setup, image normalization, engine creation, send, parse, and total runtime
 - `SmokeTestRunner.swift`: DEBUG-only device smoke runner used by `devicectl`
 - `ConsoleLog.swift`: structured `print` logging for Xcode

@@ -114,11 +114,11 @@ litert_lm_engine_settings_enable_benchmark(settings);
 
 If `vision_backend_str` is left `NULL`, the first image content part will crash inside the runtime (`vision_executor_` is null). If `max_num_images` is left at the default `0`, vision prefill fails with a `DYNAMIC_UPDATE_SLICE` shape mismatch.
 
-Use `"cpu"` for either backend only when you intentionally want a CPU diagnostic path. Avoid setting `prefill_chunk_size` for GPU vision prompts unless you have a specific reason; that override can conflict with the model's baked vision-prefill graph. The sample app caps GPU `max_num_tokens` at `384` because larger budgets can exceed the memory envelope of the current public E4B artifact. The engine handles decode, bicubic resize to the model's baked patch budget, and `[0, 1]` normalization, so callers do not need to preprocess the bitmap beyond providing a decoder-supported image format.
+Use `"cpu"` for either backend only when you intentionally want a CPU diagnostic path. Avoid setting `prefill_chunk_size` for GPU vision prompts unless you have a specific reason; that override can conflict with the model's baked vision-prefill graph. The sample app caps GPU `max_num_tokens` at `384` because larger budgets can exceed the memory envelope of the current public E4B artifact. Although the engine can decode and resize images internally, the sample app pre-resizes picker output to a 1024-pixel longest edge before sending it. This matches Edge Gallery's image path and avoids bad vision results from very large phone photos.
 
 For all-GPU E4B prompts, the sample app also disables main-executor `kLiteRtLmAdvancedConvertWeightsOnGpu` and enables `kLiteRtLmAdvancedCacheCompiledShadersOnly` on both the main and vision GPU executors. CPU-side weight conversion is slower during cold engine creation, but it lowers the pre-`send_message` process footprint enough to keep the iPhone 17 Pro Max UI path under the tested memory budget. Explicit DEBUG overrides can still set these options for diagnostics.
 
-The sample app re-encodes picker output as JPEG before sending it to LiteRT-LM. This is important for HEIC photos from iOS, because the underlying `stb_image` decoder does not support HEIC.
+The sample app applies EXIF orientation, downsizes picker output to a 1024-pixel longest edge, and re-encodes it as JPEG before sending it to LiteRT-LM. Re-encoding is important for HEIC photos from iOS, because the underlying `stb_image` decoder does not support HEIC.
 
 ## Current Sample Runtime Defaults
 

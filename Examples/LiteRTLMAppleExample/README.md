@@ -35,6 +35,7 @@ The current checked-in iOS simulator, visionOS simulator, and Catalyst artifacts
 - a small Swift wrapper around the C conversation API
 - default `gpu` main backend and `gpu` vision backend for image prompts
 - lower-memory E4B main GPU weight-conversion default
+- EXIF-aware 1024px JPEG normalization for attached images
 - compiled-shaders-only GPU cache defaults for both main and vision executors
 - benchmark display for initialization, time to first token, prefill, and decode
 - structured `print` logging for downloads, runtime setup, inference, and errors in the Xcode console

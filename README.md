@@ -182,7 +182,7 @@ If you want to point the sample at different models, update:
 
 ## Multimodal
 
-The sample app can attach a photo and ask Gemma 4 about it. Click `Attach Image` in the Prompt card, choose a photo from your Photos library, click the `"What is this?"` chip (or type your own prompt), and run inference. Picker output is re-encoded as JPEG before reaching the engine, so HEIC photos from iOS work uniformly on every platform.
+The sample app can attach a photo and ask Gemma 4 about it. Click `Attach Image` in the Prompt card, choose a photo from your Photos library, click the `"What is this?"` chip (or type your own prompt), and run inference. Picker output is EXIF-transformed, downscaled to a 1024-pixel longest edge, and re-encoded as JPEG before reaching the engine, so HEIC photos from iOS work uniformly and large phone photos stay in the vision path that matches Edge Gallery.
 
 The Conversation API on the C surface accepts user messages with mixed image and text content parts:
 
