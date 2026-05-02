@@ -134,6 +134,16 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             litert_lm_engine_settings_set_prefill_chunk_size(settings, prefillChunkSize)
         }
 
+        let cpuKernelModeName = environment["LITERT_LM_CPU_KERNEL_MODE"]
+        if let cpuKernelMode = Self.cpuKernelModeValue(cpuKernelModeName) {
+            litert_lm_engine_settings_set_cpu_kernel_mode(settings, cpuKernelMode)
+        } else if let cpuKernelModeName, !cpuKernelModeName.isEmpty {
+            ConsoleLog.error(
+                "Ignoring invalid LITERT_LM_CPU_KERNEL_MODE=\(cpuKernelModeName).",
+                category: "Runtime"
+            )
+        }
+
         if let parallelLoading = environment["LITERT_LM_PARALLEL_LOADING"].flatMap(Bool.init) {
             litert_lm_engine_settings_set_parallel_file_section_loading(settings, parallelLoading)
         }
@@ -143,7 +153,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             litert_lm_engine_settings_enable_benchmark(settings)
         }
         ConsoleLog.debug(
-            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(environment["LITERT_LM_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(environment["LITERT_LM_MAX_NUM_TOKENS"] ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled").",
+            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(environment["LITERT_LM_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(environment["LITERT_LM_MAX_NUM_TOKENS"] ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled").",
             category: "Runtime"
         )
 
@@ -303,6 +313,20 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         }
 
         return normalizedText
+    }
+
+    private static func cpuKernelModeValue(_ value: String?) -> Int32? {
+        guard let value else { return nil }
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "0", "xnnpack":
+            return 0
+        case "1", "reference":
+            return 1
+        case "2", "builtin", "built-in":
+            return 2
+        default:
+            return nil
+        }
     }
 
     private static func runtimeLibraryDirectory() -> URL {

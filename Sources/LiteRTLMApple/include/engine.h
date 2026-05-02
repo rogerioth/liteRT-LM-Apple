@@ -283,6 +283,15 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_max_num_images(
     LiteRtLmEngineSettings* settings, int max_num_images);
 
+// Sets which CPU kernels LiteRT should use for the main executor.
+// Values match LiteRtCpuKernelMode: 0=XNNPACK, 1=reference, 2=builtin.
+//
+// @param settings The engine settings.
+// @param cpu_kernel_mode The CPU kernel mode.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_cpu_kernel_mode(
+    LiteRtLmEngineSettings* settings, int cpu_kernel_mode);
+
 // Sets whether the engine should load different sections of the litertlm file
 // in parallel. Defaults to true.
 //

@@ -43,10 +43,18 @@ index 4e157c2f..d02c85d1 100644
      name = "engine_test",
      srcs = ["engine_test.cc"],
 diff --git a/c/engine.cc b/c/engine.cc
-index 28b8518c..76ecb437 100644
+index 28b8518c..70e22c69 100644
 --- a/c/engine.cc
 +++ b/c/engine.cc
-@@ -378,6 +378,16 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
+@@ -29,6 +29,7 @@
+ #include "absl/status/statusor.h"  // from @com_google_absl
+ #include "absl/strings/string_view.h"  // from @com_google_absl
+ #include "absl/time/time.h"  // from @com_google_absl
++#include "litert/c/options/litert_cpu_options.h"  // from @litert
+ #include "nlohmann/json.hpp"  // from @nlohmann_json
+ #include "runtime/conversation/conversation.h"
+ #include "runtime/conversation/io_types.h"
+@@ -378,6 +379,16 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
      executor_settings.SetActivationDataType(
          litert::lm::ActivationDataType::FLOAT32);
    }
@@ -63,7 +71,7 @@ index 28b8518c..76ecb437 100644
  
    auto* c_settings = new LiteRtLmEngineSettings;
    c_settings->settings =
-@@ -385,6 +395,14 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
+@@ -385,6 +396,14 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
    return c_settings;
  }
  
@@ -78,7 +86,7 @@ index 28b8518c..76ecb437 100644
  void litert_lm_engine_settings_delete(LiteRtLmEngineSettings* settings) {
    delete settings;
  }
-@@ -396,6 +414,15 @@ void litert_lm_engine_settings_set_max_num_tokens(
+@@ -396,6 +415,15 @@ void litert_lm_engine_settings_set_max_num_tokens(
          max_num_tokens);
    }
  }
@@ -94,7 +102,7 @@ index 28b8518c..76ecb437 100644
  void litert_lm_engine_settings_set_parallel_file_section_loading(
      LiteRtLmEngineSettings* settings, bool parallel_file_section_loading) {
    if (settings && settings->settings) {
-@@ -408,6 +435,15 @@ void litert_lm_engine_settings_set_cache_dir(LiteRtLmEngineSettings* settings,
+@@ -408,6 +436,15 @@ void litert_lm_engine_settings_set_cache_dir(LiteRtLmEngineSettings* settings,
                                               const char* cache_dir) {
    if (settings && settings->settings) {
      settings->settings->GetMutableMainExecutorSettings().SetCacheDir(cache_dir);
@@ -110,7 +118,7 @@ index 28b8518c..76ecb437 100644
    }
  }
  
-@@ -448,8 +484,19 @@ void litert_lm_engine_settings_set_enable_speculative_decoding(
+@@ -448,8 +485,19 @@ void litert_lm_engine_settings_set_enable_speculative_decoding(
  void litert_lm_engine_settings_set_activation_data_type(
      LiteRtLmEngineSettings* settings, int activation_data_type_int) {
    if (settings && settings->settings) {
@@ -131,8 +139,43 @@ index 28b8518c..76ecb437 100644
    }
  }
  
+@@ -468,6 +516,34 @@ void litert_lm_engine_settings_set_prefill_chunk_size(
+   }
+ }
+ 
++void litert_lm_engine_settings_set_cpu_kernel_mode(
++    LiteRtLmEngineSettings* settings, int cpu_kernel_mode_int) {
++  if (settings && settings->settings) {
++    auto cpu_kernel_mode =
++        static_cast<LiteRtCpuKernelMode>(cpu_kernel_mode_int);
++    switch (cpu_kernel_mode) {
++      case kLiteRtCpuKernelModeXnnpack:
++      case kLiteRtCpuKernelModeReference:
++      case kLiteRtCpuKernelModeBuiltin:
++        break;
++      default:
++        ABSL_LOG(WARNING) << "Ignoring invalid CPU kernel mode: "
++                          << cpu_kernel_mode_int;
++        return;
++    }
++
++    auto& main_settings = settings->settings->GetMutableMainExecutorSettings();
++    auto config = main_settings.MutableBackendConfig<litert::lm::CpuConfig>();
++    if (!config.ok()) {
++      ABSL_LOG(WARNING) << "Failed to get CpuConfig to set CPU kernel mode: "
++                        << config.status();
++      return;
++    }
++    config->kernel_mode = cpu_kernel_mode;
++    main_settings.SetBackendConfig(*config);
++  }
++}
++
+ LiteRtLmEngine* litert_lm_engine_create(
+     const LiteRtLmEngineSettings* settings) {
+   if (!settings || !settings->settings) {
 diff --git a/c/engine.h b/c/engine.h
-index aa1eec8b..7c2a6ec4 100644
+index aa1eec8b..1d655630 100644
 --- a/c/engine.h
 +++ b/c/engine.h
 @@ -248,6 +248,15 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
@@ -151,7 +194,7 @@ index aa1eec8b..7c2a6ec4 100644
  // Destroys LiteRT LM Engine Settings.
  //
  // @param settings The settings to destroy.
-@@ -262,6 +271,18 @@ LITERT_LM_C_API_EXPORT
+@@ -262,6 +271,27 @@ LITERT_LM_C_API_EXPORT
  void litert_lm_engine_settings_set_max_num_tokens(
      LiteRtLmEngineSettings* settings, int max_num_tokens);
  
@@ -166,6 +209,15 @@ index aa1eec8b..7c2a6ec4 100644
 +LITERT_LM_C_API_EXPORT
 +void litert_lm_engine_settings_set_max_num_images(
 +    LiteRtLmEngineSettings* settings, int max_num_images);
++
++// Sets which CPU kernels LiteRT should use for the main executor.
++// Values match LiteRtCpuKernelMode: 0=XNNPACK, 1=reference, 2=builtin.
++//
++// @param settings The engine settings.
++// @param cpu_kernel_mode The CPU kernel mode.
++LITERT_LM_C_API_EXPORT
++void litert_lm_engine_settings_set_cpu_kernel_mode(
++    LiteRtLmEngineSettings* settings, int cpu_kernel_mode);
 +
  // Sets whether the engine should load different sections of the litertlm file
  // in parallel. Defaults to true.
@@ -240,3 +292,162 @@ index 3921482d..3c3efa89 100644
            }
          } else {
  #if defined(LITERT_DISABLE_NPU)
+diff --git a/runtime/executor/BUILD b/runtime/executor/BUILD
+index a631211e..74facb97 100644
+--- a/runtime/executor/BUILD
++++ b/runtime/executor/BUILD
+@@ -672,6 +672,7 @@ cc_library(
+         "@com_google_absl//absl/status",
+         "@com_google_absl//absl/status:statusor",
+         "@com_google_absl//absl/strings",
++        "@litert//litert/c/options:litert_cpu_options",
+         "//runtime/util:litert_status_util",
+         "//runtime/util:logging",
+     ],
+diff --git a/runtime/executor/llm_executor_settings.cc b/runtime/executor/llm_executor_settings.cc
+index a6736e53..993a5d99 100644
+--- a/runtime/executor/llm_executor_settings.cc
++++ b/runtime/executor/llm_executor_settings.cc
+@@ -55,6 +55,7 @@ std::ostream& operator<<(std::ostream& os, const CpuConfig& config) {
+   os << "kv_increment_size: " << config.kv_increment_size << "\n";
+   os << "prefill_chunk_size: " << config.prefill_chunk_size << "\n";
+   os << "number_of_threads: " << config.number_of_threads << "\n";
++  os << "kernel_mode: " << config.kernel_mode << "\n";
+   return os;
+ }
+ 
+diff --git a/runtime/executor/llm_executor_settings.h b/runtime/executor/llm_executor_settings.h
+index 8704efe0..bcb6855f 100644
+--- a/runtime/executor/llm_executor_settings.h
++++ b/runtime/executor/llm_executor_settings.h
+@@ -31,6 +31,7 @@
+ #include "absl/status/status.h"  // from @com_google_absl
+ #include "absl/status/statusor.h"  // from @com_google_absl
+ #include "absl/strings/str_cat.h"  // from @com_google_absl
++#include "litert/c/options/litert_cpu_options.h"  // from @litert
+ #include "runtime/executor/executor_settings_base.h"
+ 
+ namespace litert::lm {
+@@ -108,6 +109,10 @@ struct CpuConfig {
+ 
+   // Number of threads. The default value is 4.
+   uint32_t number_of_threads = 4;
++
++  // Selects which CPU kernels LiteRT should use. XNNPACK is the default; the
++  // built-in and reference modes are useful fallbacks for delegate reshape bugs.
++  LiteRtCpuKernelMode kernel_mode = kLiteRtCpuKernelModeXnnpack;
+ };
+ std::ostream& operator<<(std::ostream& os, const CpuConfig& config);
+ 
+diff --git a/runtime/executor/llm_executor_settings_utils.cc b/runtime/executor/llm_executor_settings_utils.cc
+index bc87e77e..0d49b4ab 100644
+--- a/runtime/executor/llm_executor_settings_utils.cc
++++ b/runtime/executor/llm_executor_settings_utils.cc
+@@ -254,28 +254,32 @@ absl::StatusOr<litert::Options> CreateCompilationOptions(
+                        executor_settings.GetBackendConfig<CpuConfig>());
+       const uint32_t num_threads = cpu_config.number_of_threads;
+       cpu_compilation_options.SetNumThreads(num_threads);
+-      auto weight_cache_file = executor_settings.GetWeightCacheFile(
+-          cache_suffix.value_or("") +
+-              std::string(ExecutorSettingsBase::kXnnpackCacheSuffix),
+-          /*check_and_clean=*/true);
+-      if (weight_cache_file.ok()) {
+-        if (std::holds_alternative<std::string>(*weight_cache_file)) {
+-          cache_path = std::get<std::string>(*weight_cache_file);
+-          cpu_compilation_options.SetXNNPackWeightCachePath(cache_path.c_str());
++      cpu_compilation_options.SetKernelMode(cpu_config.kernel_mode);
++      if (cpu_config.kernel_mode == kLiteRtCpuKernelModeXnnpack) {
++        auto weight_cache_file = executor_settings.GetWeightCacheFile(
++            cache_suffix.value_or("") +
++                std::string(ExecutorSettingsBase::kXnnpackCacheSuffix),
++            /*check_and_clean=*/true);
++        if (weight_cache_file.ok()) {
++          if (std::holds_alternative<std::string>(*weight_cache_file)) {
++            cache_path = std::get<std::string>(*weight_cache_file);
++            cpu_compilation_options.SetXNNPackWeightCachePath(
++                cache_path.c_str());
++          } else {
++            auto scoped_cache_file =
++                std::get<std::shared_ptr<ScopedFile>>(*weight_cache_file);
++            ASSIGN_OR_RETURN(auto duplicated, scoped_cache_file->Duplicate());
++            ASSIGN_OR_RETURN(int fd, duplicated.Release());
++            cpu_compilation_options.SetXNNPackWeightCacheFileDescriptor(fd);
++          }
+         } else {
+-          auto scoped_cache_file =
+-              std::get<std::shared_ptr<ScopedFile>>(*weight_cache_file);
+-          ASSIGN_OR_RETURN(auto duplicated, scoped_cache_file->Duplicate());
+-          ASSIGN_OR_RETURN(int fd, duplicated.Release());
+-          cpu_compilation_options.SetXNNPackWeightCacheFileDescriptor(fd);
++          ABSL_LOG(WARNING) << "Can't use cache: " << weight_cache_file.status();
+         }
+-      } else {
+-        ABSL_LOG(WARNING) << "Can't use cache: " << weight_cache_file.status();
++        auto default_xnn_options = TfLiteXNNPackDelegateOptionsDefault();
++        cpu_compilation_options.SetXNNPackFlags(
++            default_xnn_options.flags |
++            TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS);
+       }
+-      auto default_xnn_options = TfLiteXNNPackDelegateOptionsDefault();
+-      cpu_compilation_options.SetXNNPackFlags(
+-          default_xnn_options.flags |
+-          TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS);
+       LITERT_ASSIGN_OR_RETURN(auto& runtime_options,
+                               compilation_options.GetRuntimeOptions());
+       runtime_options.SetCompressQuantizationZeroPoints(true);
+diff --git a/runtime/executor/llm_litert_compiled_model_executor.cc b/runtime/executor/llm_litert_compiled_model_executor.cc
+index b2d630a9..370d87c1 100644
+--- a/runtime/executor/llm_litert_compiled_model_executor.cc
++++ b/runtime/executor/llm_litert_compiled_model_executor.cc
+@@ -1929,29 +1929,32 @@ LlmLiteRtCompiledModelExecutorDynamic::Create(
+     kv_increament_size = cpu_config.kv_increment_size;
+     prefill_chunk_size = cpu_config.prefill_chunk_size;
+     cpu_compilation_options.SetNumThreads(cpu_config.number_of_threads);
+-    auto weight_cache_file = executor_settings.GetWeightCacheFile(
+-        ExecutorSettingsBase::kXnnpackCacheSuffix, /*check_and_clean=*/true);
+-    if (weight_cache_file.ok()) {
+-      if (std::holds_alternative<std::string>(*weight_cache_file)) {
+-        weight_cache_path = std::get<std::string>(*weight_cache_file);
+-        ABSL_LOG(INFO) << "Setting XNNPACK weight cache path: "
+-                       << weight_cache_path;
+-        cpu_compilation_options.SetXNNPackWeightCachePath(
+-            weight_cache_path.c_str());
+-      } else {
+-        auto scoped_cache_file =
+-            std::get<std::shared_ptr<ScopedFile>>(*weight_cache_file);
+-        ASSIGN_OR_RETURN(auto duplicated, scoped_cache_file->Duplicate());
+-        ASSIGN_OR_RETURN(int fd, duplicated.Release());
+-        cpu_compilation_options.SetXNNPackWeightCacheFileDescriptor(fd);
++    cpu_compilation_options.SetKernelMode(cpu_config.kernel_mode);
++    if (cpu_config.kernel_mode == kLiteRtCpuKernelModeXnnpack) {
++      auto weight_cache_file = executor_settings.GetWeightCacheFile(
++          ExecutorSettingsBase::kXnnpackCacheSuffix, /*check_and_clean=*/true);
++      if (weight_cache_file.ok()) {
++        if (std::holds_alternative<std::string>(*weight_cache_file)) {
++          weight_cache_path = std::get<std::string>(*weight_cache_file);
++          ABSL_LOG(INFO) << "Setting XNNPACK weight cache path: "
++                         << weight_cache_path;
++          cpu_compilation_options.SetXNNPackWeightCachePath(
++              weight_cache_path.c_str());
++        } else {
++          auto scoped_cache_file =
++              std::get<std::shared_ptr<ScopedFile>>(*weight_cache_file);
++          ASSIGN_OR_RETURN(auto duplicated, scoped_cache_file->Duplicate());
++          ASSIGN_OR_RETURN(int fd, duplicated.Release());
++          cpu_compilation_options.SetXNNPackWeightCacheFileDescriptor(fd);
++        }
+       }
++      auto default_xnn_options = TfLiteXNNPackDelegateOptionsDefault();
++      cpu_compilation_options.SetXNNPackFlags(
++          default_xnn_options.flags |
++          TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS);
+     }
+     RET_CHECK_GT(kv_increament_size, 0)
+         << "KV increment size must be greater than 0.";
+-    auto default_xnn_options = TfLiteXNNPackDelegateOptionsDefault();
+-    cpu_compilation_options.SetXNNPackFlags(
+-        default_xnn_options.flags |
+-        TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS);
+     LITERT_ASSIGN_OR_RETURN(auto& runtime_options,
+                             compilation_options.GetRuntimeOptions());
+     runtime_options.SetCompressQuantizationZeroPoints(true);

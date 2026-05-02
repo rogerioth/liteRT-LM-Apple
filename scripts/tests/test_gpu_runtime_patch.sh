@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 patch_file="${repo_root}/patches/0001-export-ios-shared-engine-dylib.patch"
+runtime_file="${repo_root}/Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/LiteRTLMRuntime.swift"
 
 require_pattern() {
   local pattern="$1"
@@ -22,5 +23,12 @@ require_pattern "GetLitertDispatchLibDir" "the stored runtime library directory 
 require_pattern "static_cast<int64_t>(ToLiteRtLogSeverityInt8" "int64 LiteRT min-log-severity environment option"
 require_pattern "ActivationDataType::FLOAT16" "FP16 default for the vision GPU executor"
 require_pattern "GetMutableVisionExecutorSettings" "C settings propagation to the vision executor"
+require_pattern "litert_lm_engine_settings_set_cpu_kernel_mode" "the C API CPU kernel mode setter"
+require_pattern "SetKernelMode" "LiteRT CPU kernel mode propagation"
+
+if ! grep -q "LITERT_LM_CPU_KERNEL_MODE" "${runtime_file}"; then
+  echo "FAIL: example runtime is missing the CPU kernel mode debug environment override." >&2
+  exit 1
+fi
 
 echo "PASS: LiteRT-LM patch configures the GPU runtime library directory."
