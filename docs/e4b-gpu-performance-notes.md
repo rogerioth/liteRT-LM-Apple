@@ -164,7 +164,17 @@ The performance gap is not primarily an image-size issue. Edge Gallery is fast b
 - Parallel section loading.
 - A different Google-hosted E4B model artifact than the sample app's Hugging Face artifact.
 
-The current sample app fix proves `vision_backend=gpu` can work correctly, but it does not match Edge Gallery performance because it deliberately avoids the main GPU executor. The all-GPU retests show that exposing more app-level settings is not sufficient for the public E4B artifact: the artifact's main signatures and memory behavior differ from the Edge Gallery artifact.
+As of 2026-05-02, E4B can complete with both `LITERT_LM_BACKEND=gpu` and `LITERT_LM_VISION_BACKEND=gpu` on the iPhone 16 Pro Max. The decisive fix was to release the compiled vision executor resources after image encoding and before LLM prefill. Before that release, the process reached the first `prefill_128` per-layer embedding lookup and was killed by iOS. After the release, the same public Hugging Face E4B artifact completes all three prefill chunks.
+
+This fixes correctness for all-GPU E4B on device, but it still does not make the public artifact match Edge Gallery's startup/perceived performance. Edge Gallery appears to use a different Google-hosted model artifact with different main signatures and no visible CPU MTP drafter path, while the public artifact still exposes `prefill_1024`, `prefill_128`, `decode`, and `verify`.
+
+The new runtime switch is:
+
+```text
+LITERT_LM_RELEASE_VISION_EXECUTOR_AFTER_ENCODE
+```
+
+On Apple platforms it defaults to enabled when the main executor backend is GPU. Set it to `0`, `false`, `no`, or `off` to disable for diagnostics. Set it to `1`, `true`, `yes`, or `on` to force the release.
 
 ## Next investigation path
 
@@ -231,4 +241,9 @@ These files were generated during the investigation and may exist only in the lo
 .worktree/e4b-16pm-diag-main-fp16-max512-img1-vision-share-off.log
 .worktree/e4b-16pm-diag-main-fp16-max512-img1-vision-madvise-off.log
 .worktree/e4b-16pm-diag-main-fp16-vision-fp16-max512-img1.log
+.worktree/e4b-16pm-prefill-internal-trace.log
+.worktree/e4b-16pm-release-vision-before-prefill.log
+.worktree/e4b-16pm-release-vision-clean.log
+.worktree/e4b-16pm-release-vision-clean-img1245.log
+.worktree/e4b-16pm-release-vision-clean-heic.log
 ```
