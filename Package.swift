@@ -24,11 +24,16 @@ let package = Package(
             name: "GemmaModelConstraintProvider",
             path: "Artifacts/GemmaModelConstraintProvider.xcframework"
         ),
+        .binaryTarget(
+            name: "LiteRtMetalAccelerator",
+            path: "Artifacts/LiteRtMetalAccelerator.xcframework"
+        ),
         .target(
             name: "LiteRTLMApple",
             dependencies: [
                 "LiteRTLMEngineCPU",
                 "GemmaModelConstraintProvider",
+                "LiteRtMetalAccelerator",
             ],
             path: "Sources/LiteRTLMApple",
             publicHeadersPath: "include"

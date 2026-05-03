@@ -24,7 +24,7 @@ This repo is designed to let you answer "yes" to all three.
 ## What You Get
 
 - a Swift package product named `LiteRTLMApple`
-- prebuilt `LiteRTLMEngineCPU.xcframework` and `GemmaModelConstraintProvider.xcframework`
+- prebuilt `LiteRTLMEngineCPU.xcframework`, `LiteRtMetalAccelerator.xcframework`, and `GemmaModelConstraintProvider.xcframework`
 - direct access to the upstream `engine.h` C API from Swift and Objective-C
 - official package support for iOS, visionOS, Apple Silicon macOS, and Apple Silicon Mac Catalyst
 - a complete SwiftUI sample app for local model download and single-turn inference on iPhone, iPad, Apple Vision Pro, native Mac, and Mac Catalyst
@@ -55,7 +55,7 @@ This repository is probably not what you want if you are looking for:
 If you want to integrate this package into another app, use the GitHub repository URL and a tagged release.
 
 - repository URL: `https://github.com/rogerioth/liteRT-LM-Apple.git`
-- current release: `v0.2.5`
+- current release: `v0.3.0`
 
 This branch's sample app intentionally resolves the package from `main` over GitHub SPM so the example tracks the latest unreleased package state (visionOS support, multimodal image input) until the next tag is cut.
 
@@ -65,14 +65,14 @@ In Xcode:
 2. Choose `File` -> `Add Package Dependencies...`.
 3. Enter `https://github.com/rogerioth/liteRT-LM-Apple.git`.
 4. Select `Up to Next Minor Version`.
-5. Set the version to `0.2.5`.
+5. Set the version to `0.3.0`.
 6. Link the `LiteRTLMApple` product to your app target.
 
 In `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.2.5")
+    .package(url: "https://github.com/rogerioth/liteRT-LM-Apple.git", from: "0.3.0")
 ]
 ```
 
@@ -94,37 +94,36 @@ If you want to inspect or modify the package while integrating it, you can add t
 
 ## What Integration Looks Like
 
-The package intentionally stays close to the upstream LiteRT-LM C API. If you want low-level control, you still have it.
+The package intentionally stays close to the upstream LiteRT-LM C API. If you want low-level control, you still have it. The sample app wraps that surface in `LiteRTLMRuntime`, which most apps can either use directly or copy as a starting point.
 
-Here is a minimal single-turn flow from Swift:
+A single-turn call from Swift looks like this:
 
 ```swift
-import Foundation
 import LiteRTLMApple
 
-// Pass "cpu" for vision_backend_str if you plan to send images.
-let settings = litert_lm_engine_settings_create(modelPath, "cpu", "cpu", nil)
-litert_lm_engine_settings_set_cache_dir(settings, cacheDirectory)
-litert_lm_engine_settings_set_max_num_images(settings, 1)
-
-let engine = litert_lm_engine_create(settings)
-
-let sessionConfig = litert_lm_session_config_create()
-litert_lm_session_config_set_max_output_tokens(sessionConfig, 256)
-
-let conversationConfig = litert_lm_conversation_config_create()
-litert_lm_conversation_config_set_session_config(conversationConfig, sessionConfig)
-litert_lm_conversation_config_set_system_message(conversationConfig, systemMessageJSON)
-
-let conversation = litert_lm_conversation_create(engine, conversationConfig)
-let response = litert_lm_conversation_send_message(
-    conversation,
-    userMessageJSON,
-    #"{"enable_thinking":false}"#
+let runtime = LiteRTLMRuntime()
+let result = try await runtime.generateResponse(
+    modelURL: modelURL,
+    cacheDirectory: cacheDirectory,
+    inputs: InferenceInputs(prompt: "What is this?", imageData: pngData),
+    options: LiteRTLMRuntimeOptions()
 )
 ```
 
-If you want a higher-level reference for model download, cache management, JSON handling, response extraction, and benchmark collection, look at the sample app instead of starting from scratch.
+`LiteRTLMRuntimeOptions()` ships with safe defaults validated for Gemma 4 image inference on Apple devices (GPU main, CPU vision for Gemma 4 image prompts, FP16 main activations, 384-token cap). To run a diagnostic configuration, mutate the struct fields before calling:
+
+```swift
+var options = LiteRTLMRuntimeOptions()
+options.visionBackend = .gpu                       // override Gemma 4 default
+options.visionActivationDataType = .float32        // correct embeddings, large memory
+options.minLogLevel = .info                        // see runtime startup logs
+let result = try await runtime.generateResponse(
+    modelURL: modelURL, cacheDirectory: cacheDirectory,
+    inputs: inputs, options: options
+)
+```
+
+If you want lower-level control, the upstream C API is fully exposed through the package. The sample app's `LiteRTLMRuntime.swift` is the canonical example of how to drive it from Swift, including model download, cache management, JSON encoding, response extraction, and benchmark collection.
 
 ## Sample App
 
@@ -145,6 +144,21 @@ The current sample app includes pinned Gemma 4 examples:
 
 That makes this repository a useful starting point if you want to put Gemma 4 directly on Apple hardware instead of routing inference through a server.
 
+The sample runtime applies these defaults through `LiteRTLMRuntimeOptions()`:
+
+- main executor: `.gpu`
+- vision backend: `.cpu` for Gemma 4 image prompts (E2B and E4B both produce semantically wrong embeddings on the Metal FP16 vision encoder; the FP32 path exceeds iOS cold-start memory limits when paired with the GPU main executor); `.gpu` for non-Gemma-4 image prompts when main is GPU; not instantiated for text-only prompts
+- `max_num_images`: `1`
+- `mainActivationDataType`: `.float16` on GPU main
+- `maxNumTokens`: `384` on GPU main
+- E4B-only: main `gpuConvertWeightsOnGpu = false` (lower cold-start memory)
+- main GPU `gpuCacheCompiledShadersOnly = true`
+- vision GPU `cacheCompiledShadersOnly = true` when vision is GPU
+- session `max_output_tokens`: `256`
+- benchmark collection: enabled
+
+There are no environment-variable overrides. Per-call tuning happens through `LiteRTLMRuntimeOptions`; setting any field bypasses the runtime's model-aware default for that field.
+
 Open it here:
 
 ```text
@@ -157,23 +171,25 @@ If you want to point the sample at different models, update:
 
 ## Multimodal
 
-The sample app can attach a photo and ask Gemma 4 about it. Click `Attach Image` in the Prompt card, choose a photo from your Photos library, click the `"What is this?"` chip (or type your own prompt), and run inference. Picker output is re-encoded as JPEG before reaching the engine, so HEIC photos from iOS work uniformly on every platform.
+The sample app can attach a photo and ask Gemma 4 about it. Click `Attach Image` in the Prompt card, choose a photo from your Photos library, click the `"What is this?"` chip (or type your own prompt), and run inference. Picker output is EXIF-transformed, downscaled to a 1024-pixel longest edge, and re-encoded as PNG before reaching the engine, so HEIC photos from iOS work uniformly and large phone photos stay in the vision path that matches Edge Gallery.
 
 The Conversation API on the C surface accepts user messages with mixed image and text content parts:
 
 ```json
 {"role":"user","content":[
-  {"type":"image","blob":"<base64-jpeg>"},
+  {"type":"image","blob":"<base64-png>"},
   {"type":"text","text":"What is this?"}
 ]}
 ```
 
-Two settings must be in place before creating the engine on a vision-capable model:
+If you build directly against the C API (rather than going through `LiteRTLMRuntime`), these settings must be in place before creating the engine on a vision-capable model:
 
 1. Pass `"cpu"` (or `"gpu"`) for `vision_backend_str` in `litert_lm_engine_settings_create` — passing `NULL` skips vision-executor instantiation and the first image content part will crash.
 2. Call `litert_lm_engine_settings_set_max_num_images(settings, 1)` (or higher). The default of `0` causes the prefill graph to fail with a `DYNAMIC_UPDATE_SLICE` shape mismatch.
+3. For the GPU main executor, set the main activation type to `FLOAT16` (`1`) and cap `max_num_tokens` to `384`. Higher GPU token budgets can exceed device memory on the current public Gemma 4 artifacts.
+4. For Gemma 4 image prompts, prefer `vision_backend_str = "cpu"`. The GPU vision encoder on Metal currently runs in FP16 (the C wrapper's memory-saving default) and produces semantically wrong embeddings for Gemma 4 — the dog test photo is described as "a crowd of people" or "a person's face". Forcing FP32 vision GPU restores correctness but exceeds iOS cold-start memory limits when paired with the GPU main executor.
 
-Leave `max_num_tokens` and `prefill_chunk_size` at their model-driven defaults for vision prompts; explicit overrides can conflict with the baked vision-prefill graph.
+Leave `prefill_chunk_size` at its model-driven default for vision prompts. Avoid overriding `max_num_tokens` or `prefill_chunk_size` unless you know the model artifact supports the requested shape.
 
 ## Screenshots
 
@@ -226,6 +242,7 @@ That script orchestrates the internal subscripts and runs the full pipeline:
 Updated outputs land in:
 
 - `Artifacts/LiteRTLMEngineCPU.xcframework`
+- `Artifacts/LiteRtMetalAccelerator.xcframework`
 - `Artifacts/GemmaModelConstraintProvider.xcframework`
 - `Sources/LiteRTLMApple/include/engine.h`
 
@@ -265,7 +282,7 @@ Swift Package Manager resolves this package from Git tags. If you are integratin
 
 Current published release:
 
-- `v0.2.5`
+- `v0.3.0`
 
 ## Upstream Pin
 

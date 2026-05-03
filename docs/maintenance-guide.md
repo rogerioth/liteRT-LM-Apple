@@ -48,6 +48,7 @@ If the sample project is temporarily following a feature branch through remote S
 ## Files That Usually Change During Maintenance
 
 - `Artifacts/LiteRTLMEngineCPU.xcframework`
+- `Artifacts/LiteRtMetalAccelerator.xcframework`
 - `Artifacts/GemmaModelConstraintProvider.xcframework`
 - `Sources/LiteRTLMApple/include/engine.h`
 - `README.md` when user-facing setup or compatibility notes change

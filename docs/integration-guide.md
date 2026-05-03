@@ -68,18 +68,20 @@ If you want a working reference for those pieces, use the sample app in `Example
 At a high level, LiteRT-LM usage looks like this:
 
 1. Create engine settings with the model path.
-2. Set the cache directory.
-3. Create the engine.
-4. Create a session config.
-5. Create a conversation config.
-6. Send a JSON message payload.
-7. Parse the JSON response payload.
+2. Set the runtime library directory if you depend on dynamically loaded accelerators.
+3. Set the cache directory.
+4. Set model/runtime limits such as image count and token budget.
+5. Create the engine.
+6. Create a session config.
+7. Create a conversation config.
+8. Send a JSON message payload.
+9. Parse the JSON response payload.
 
 The main README includes a small Swift example for that flow.
 
 ## Sending An Image
 
-To attach an image to a user message, embed a base64-encoded JPEG (or any stb_image-decodable format) as the first content part:
+To attach an image to a user message, embed a base64-encoded PNG (or any other `stb_image`-decodable format) as the first content part:
 
 ```json
 {"role":"user","content":[
@@ -88,20 +90,72 @@ To attach an image to a user message, embed a base64-encoded JPEG (or any stb_im
 ]}
 ```
 
-Before creating the engine, declare a vision backend so the engine actually instantiates a vision executor, and raise the per-prompt image budget so the prefill graph reserves enough KV cache:
+If you go through the sample app's `LiteRTLMRuntime` wrapper, the Swift API takes care of the boilerplate:
+
+```swift
+let result = try await LiteRTLMRuntime().generateResponse(
+    modelURL: modelURL,
+    cacheDirectory: cacheDirectory,
+    inputs: InferenceInputs(prompt: "What is this?", imageData: pngData),
+    options: LiteRTLMRuntimeOptions()
+)
+```
+
+If you call the C API directly, the sample app's effective GPU profile for image prompts is:
 
 ```c
 LiteRtLmEngineSettings* settings = litert_lm_engine_settings_create(
     model_path,
-    /*backend_str=*/"cpu",
-    /*vision_backend_str=*/"cpu",
+    /*backend_str=*/"gpu",
+    /*vision_backend_str=*/"cpu",            // Gemma 4 default; see note below
     /*audio_backend_str=*/NULL);
+litert_lm_engine_settings_set_runtime_library_dir(settings, runtime_library_dir);
+litert_lm_engine_settings_set_cache_dir(settings, cache_dir);
 litert_lm_engine_settings_set_max_num_images(settings, 1);
+litert_lm_engine_settings_set_main_activation_data_type(settings, 1);  // FLOAT16
+litert_lm_engine_settings_set_max_num_tokens(settings, 384);
+litert_lm_engine_settings_set_advanced_bool(
+    settings, kLiteRtLmAdvancedConvertWeightsOnGpu, false);  // E4B only
+litert_lm_engine_settings_set_advanced_bool(
+    settings, kLiteRtLmAdvancedCacheCompiledShadersOnly, true);
+litert_lm_engine_settings_enable_benchmark(settings);
 ```
 
-If `vision_backend_str` is left `NULL`, the first image content part will crash inside the runtime (`vision_executor_` is null). If `max_num_images` is left at the default `0`, vision prefill fails with a `DYNAMIC_UPDATE_SLICE` shape mismatch.
+A few subtleties worth knowing:
 
-Avoid setting `max_num_tokens` or `prefill_chunk_size` for vision prompts unless you have a specific reason; those overrides can conflict with the model's baked vision-prefill graph. The engine handles decode, bicubic resize to the model's baked dimension (`768x768` for Gemma 4 E2B / E4B), and `[0, 1]` normalization, so callers do not need to preprocess the bitmap.
+- If `vision_backend_str` is left `NULL`, the first image content part will crash inside the runtime (`vision_executor_` is null).
+- If `max_num_images` is left at the default `0`, vision prefill fails with a `DYNAMIC_UPDATE_SLICE` shape mismatch.
+- For Gemma 4 image prompts, prefer `vision_backend_str = "cpu"`. The Metal vision encoder currently runs in FP16 (the C wrapper's memory-saving default) and produces semantically wrong embeddings for Gemma 4 — the dog test photo is described as "a crowd of people" or "a person's face". Forcing FP32 vision GPU restores correctness but exceeds iOS cold-start memory limits when paired with the GPU main executor. The sample app's `LiteRTLMRuntimeOptions.visionBackend` defaults to `.cpu` for Gemma 4 to side-step both failure modes.
+- For E4B specifically, also set main `kLiteRtLmAdvancedConvertWeightsOnGpu = false` and the vision-GPU `cache_compiled_shaders_only = true` if you are running vision GPU. CPU-side weight conversion is slower during cold engine creation, but it lowers the pre-`send_message` process footprint enough to fit the tested memory budget on iPhone 16 Pro Max and iPhone 17 Pro Max.
+- Avoid setting `prefill_chunk_size` for GPU vision prompts unless you have a specific reason; that override can conflict with the model's baked vision-prefill graph.
+
+The sample app applies EXIF orientation, downsizes picker output to a 1024-pixel longest edge, and re-encodes it as PNG before sending it to LiteRT-LM. Re-encoding is important for HEIC photos from iOS, because the underlying `stb_image` decoder does not support HEIC.
+
+## Current Sample Runtime Defaults
+
+The sample app's `LiteRTLMRuntimeOptions()` ships with these defaults:
+
+- `backend`: `.gpu`
+- `visionBackend`: `nil` — runtime resolves to `.cpu` for Gemma 4 image prompts (E2B and E4B), otherwise mirrors `backend` when an image is attached, otherwise no vision executor
+- audio backend: not instantiated
+- `maxNumImages`: `1`
+- `mainActivationDataType`: `nil` — runtime resolves to `.float16` on GPU main
+- `maxNumTokens`: `nil` — runtime resolves to `384` on GPU main
+- `advanced.gpuConvertWeightsOnGpu`: `nil` — runtime resolves to `false` for E4B on GPU main
+- `advanced.gpuCacheCompiledShadersOnly`: `nil` — runtime resolves to `true` on GPU main
+- `visionGPU.cacheCompiledShadersOnly`: `nil` — runtime resolves to `true` when vision is GPU
+- `cpuKernelMode`: `nil` — runtime resolves to `.builtin` for E4B main-CPU + vision-GPU; otherwise upstream default
+- session max output tokens: `256` (currently hard-coded in `LiteRTLMRuntime`)
+- `benchmark`: `true`
+
+There are no environment-variable overrides. To change any setting per-call, mutate the corresponding field on `LiteRTLMRuntimeOptions` before passing it to `generateResponse`.
+
+The benchmark fields exposed in the sample UI and logs are:
+
+- initialization time from `litert_lm_benchmark_info_get_total_init_time_in_second`
+- time to first token from `litert_lm_benchmark_info_get_time_to_first_token`
+- per-turn prefill token count and throughput from `litert_lm_benchmark_info_get_num_prefill_turns`, `litert_lm_benchmark_info_get_prefill_token_count_at`, and `litert_lm_benchmark_info_get_prefill_tokens_per_sec_at`
+- per-turn decode token count and throughput from `litert_lm_benchmark_info_get_num_decode_turns`, `litert_lm_benchmark_info_get_decode_token_count_at`, and `litert_lm_benchmark_info_get_decode_tokens_per_sec_at`
 
 ## When To Use The Sample App First
 

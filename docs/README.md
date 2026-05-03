@@ -6,3 +6,4 @@ If you are evaluating `LiteRT-LM-Apple` for iPhone, iPad, Apple Vision Pro, or M
 - [Sample App Guide](sample-app.md): what the example project demonstrates, how models are downloaded locally, and where to change its behavior.
 - [Maintenance Guide](maintenance-guide.md): how the package is rebuilt from upstream, how artifacts are refreshed, and how releases are published.
 - [Troubleshooting](troubleshooting.md): the main simulator, build, and model-size issues you are most likely to hit.
+- [Gemma 4 E4B GPU Performance Notes](e4b-gpu-performance-notes.md): current device findings comparing the sample app against Google AI Edge Gallery.

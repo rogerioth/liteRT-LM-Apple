@@ -59,6 +59,13 @@
             ReferencedContainer = "container:LiteRTLMAppleExample.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "LITERT_LM_VISION_BACKEND"
+            value = "gpu"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

@@ -111,6 +111,22 @@ typedef struct {
   int32_t seed;
 } LiteRtLmSamplerParams;
 
+// Boolean advanced settings exposed for GPU/runtime diagnostics.
+typedef enum {
+  kLiteRtLmAdvancedClearKvCacheBeforePrefill = 0,
+  kLiteRtLmAdvancedMadviseOriginalSharedTensors = 1,
+  kLiteRtLmAdvancedConvertWeightsOnGpu = 2,
+  kLiteRtLmAdvancedWaitForWeightsConversionCompleteInBenchmark = 3,
+  kLiteRtLmAdvancedOptimizeShaderCompilation = 4,
+  kLiteRtLmAdvancedCacheCompiledShadersOnly = 5,
+  kLiteRtLmAdvancedShareConstantTensors = 6,
+  kLiteRtLmAdvancedSamplerHandlesInput = 7,
+  kLiteRtLmAdvancedAllowSrcQuantizedFcConvOps = 8,
+  kLiteRtLmAdvancedHintWaitingForCompletion = 9,
+  kLiteRtLmAdvancedGpuContextLowPriority = 10,
+  kLiteRtLmAdvancedDisableDelegateClustering = 11,
+} LiteRtLmAdvancedBoolOption;
+
 // Creates a LiteRT LM Session Config.
 // The caller is responsible for destroying the config using
 // `litert_lm_session_config_delete`.
@@ -248,6 +264,15 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
     const char* model_path, const char* backend_str,
     const char* vision_backend_str, const char* audio_backend_str);
 
+// Sets the directory where LiteRT should look for runtime plugin libraries,
+// such as libLiteRtMetalAccelerator.dylib.
+//
+// @param settings The engine settings.
+// @param runtime_library_dir The directory containing LiteRT runtime plugins.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_runtime_library_dir(
+    LiteRtLmEngineSettings* settings, const char* runtime_library_dir);
+
 // Destroys LiteRT LM Engine Settings.
 //
 // @param settings The settings to destroy.
@@ -274,6 +299,15 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_max_num_images(
     LiteRtLmEngineSettings* settings, int max_num_images);
 
+// Sets which CPU kernels LiteRT should use for the main executor.
+// Values match LiteRtCpuKernelMode: 0=XNNPACK, 1=reference, 2=builtin.
+//
+// @param settings The engine settings.
+// @param cpu_kernel_mode The CPU kernel mode.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_cpu_kernel_mode(
+    LiteRtLmEngineSettings* settings, int cpu_kernel_mode);
+
 // Sets whether the engine should load different sections of the litertlm file
 // in parallel. Defaults to true.
 //
@@ -299,6 +333,30 @@ void litert_lm_engine_settings_set_cache_dir(LiteRtLmEngineSettings* settings,
 // (e.g., 0 for F32, 1 for F16, 2 for I16, 3 for I8).
 LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_activation_data_type(
+    LiteRtLmEngineSettings* settings, int activation_data_type_int);
+
+// Sets the activation data type for the main executor only.
+//
+// @param settings The engine settings.
+// @param activation_data_type_int The activation data type.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_main_activation_data_type(
+    LiteRtLmEngineSettings* settings, int activation_data_type_int);
+
+// Sets the activation data type for the vision executor only, if present.
+//
+// @param settings The engine settings.
+// @param activation_data_type_int The activation data type.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_vision_activation_data_type(
+    LiteRtLmEngineSettings* settings, int activation_data_type_int);
+
+// Sets the activation data type for the audio executor only, if present.
+//
+// @param settings The engine settings.
+// @param activation_data_type_int The activation data type.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_audio_activation_data_type(
     LiteRtLmEngineSettings* settings, int activation_data_type_int);
 
 // Sets the prefill chunk size for the engine. Only applicable for CPU backend
@@ -340,6 +398,57 @@ void litert_lm_engine_settings_set_num_decode_tokens(
 LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_enable_speculative_decoding(
     LiteRtLmEngineSettings* settings, bool enable_speculative_decoding);
+
+// Sets the prefill batch sizes used by LiteRT-LM magic-number rewriting.
+//
+// @param settings The engine settings.
+// @param prefill_batch_sizes An array of positive prefill batch sizes.
+// @param count The number of entries in prefill_batch_sizes.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_prefill_batch_sizes(
+    LiteRtLmEngineSettings* settings, const int* prefill_batch_sizes,
+    int count);
+
+// Sets a boolean advanced setting on the main executor.
+//
+// @param settings The engine settings.
+// @param option The LiteRtLmAdvancedBoolOption value to set.
+// @param value The setting value.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_advanced_bool(
+    LiteRtLmEngineSettings* settings, int option, bool value);
+
+// Sets a boolean GPU diagnostic setting on the vision executor.
+//
+// Supported options are:
+// kLiteRtLmAdvancedMadviseOriginalSharedTensors,
+// kLiteRtLmAdvancedConvertWeightsOnGpu,
+// kLiteRtLmAdvancedCacheCompiledShadersOnly, and
+// kLiteRtLmAdvancedShareConstantTensors.
+//
+// @param settings The engine settings.
+// @param option The LiteRtLmAdvancedBoolOption value to set.
+// @param value The setting value.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_vision_gpu_bool(
+    LiteRtLmEngineSettings* settings, int option, bool value);
+
+// Sets GPU external tensor mode on the main executor.
+//
+// @param settings The engine settings.
+// @param external_tensor_mode Whether to use external tensor mode.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_gpu_external_tensor_mode(
+    LiteRtLmEngineSettings* settings, bool external_tensor_mode);
+
+// Sets or clears the GPU hint kernel batch size on the main executor. Values
+// greater than zero set the hint; values less than or equal to zero clear it.
+//
+// @param settings The engine settings.
+// @param hint_kernel_batch_size The kernel batch size hint.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_gpu_hint_kernel_batch_size(
+    LiteRtLmEngineSettings* settings, int hint_kernel_batch_size);
 
 // Creates a LiteRT LM Engine from the given settings. The caller is responsible
 // for destroying the engine using `litert_lm_engine_delete`.

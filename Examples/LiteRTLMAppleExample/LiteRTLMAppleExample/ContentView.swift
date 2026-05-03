@@ -319,7 +319,11 @@ struct ContentView: View {
 
         do {
             let rawData = try Data(contentsOf: url)
-            let normalized = try ImageDataNormalizer.makeJPEGData(from: rawData)
+            ConsoleLog.info(
+                "Loaded image candidate from \(url.path) raw_bytes=\(rawData.count).",
+                category: "ViewModel"
+            )
+            let normalized = try ImageDataNormalizer.makePNGData(from: rawData)
             await MainActor.run { viewModel.attachImage(normalized) }
         } catch {
             await MainActor.run {
@@ -399,6 +403,10 @@ struct ContentView: View {
                     InfoRow(label: "Initialization", value: benchmark.initializationDescription, monospaced: true)
                     Divider()
                     InfoRow(label: "Time to first token", value: benchmark.timeToFirstTokenDescription, monospaced: true)
+                    Divider()
+                    InfoRow(label: "Prefill", value: benchmark.prefillDescription, monospaced: true)
+                    Divider()
+                    InfoRow(label: "Decode", value: benchmark.decodeDescription, monospaced: true)
                 }
             }
         }

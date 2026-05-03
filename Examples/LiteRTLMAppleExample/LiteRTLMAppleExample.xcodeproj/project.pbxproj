@@ -109,7 +109,7 @@
 			mainGroup = 2EA300BAC80BEBF635759592;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				9FAE354467BBDDA1950B8473 /* XCRemoteSwiftPackageReference "liteRT-LM-Apple" */,
+				9FAE354467BBDDA1950B8473 /* XCLocalSwiftPackageReference "../.." */,
 			);
 			productRefGroup = 94A041948E43E6F3857E3131 /* Products */;
 			projectDirPath = "";
@@ -346,21 +346,17 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		9FAE354467BBDDA1950B8473 /* XCRemoteSwiftPackageReference "liteRT-LM-Apple" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/rogerioth/liteRT-LM-Apple.git";
-			requirement = {
-				branch = "main";
-				kind = branch;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		9FAE354467BBDDA1950B8473 /* XCLocalSwiftPackageReference "../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		DCFA7CD16C587F817ACA85C1 /* LiteRTLMApple */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 9FAE354467BBDDA1950B8473 /* XCRemoteSwiftPackageReference "liteRT-LM-Apple" */;
+			package = 9FAE354467BBDDA1950B8473 /* XCLocalSwiftPackageReference "../.." */;
 			productName = LiteRTLMApple;
 		};
 /* End XCSwiftPackageProductDependency section */
