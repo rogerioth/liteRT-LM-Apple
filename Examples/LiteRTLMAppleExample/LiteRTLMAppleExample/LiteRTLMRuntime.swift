@@ -66,15 +66,32 @@ protocol LiteRTLMRuntimeProtocol: Sendable {
     func generateResponse(
         modelURL: URL,
         cacheDirectory: URL,
-        inputs: InferenceInputs
+        inputs: InferenceInputs,
+        options: LiteRTLMRuntimeOptions
     ) async throws -> InferenceResult
+}
+
+extension LiteRTLMRuntimeProtocol {
+    func generateResponse(
+        modelURL: URL,
+        cacheDirectory: URL,
+        inputs: InferenceInputs
+    ) async throws -> InferenceResult {
+        try await generateResponse(
+            modelURL: modelURL,
+            cacheDirectory: cacheDirectory,
+            inputs: inputs,
+            options: LiteRTLMRuntimeOptions()
+        )
+    }
 }
 
 struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
     func generateResponse(
         modelURL: URL,
         cacheDirectory: URL,
-        inputs: InferenceInputs
+        inputs: InferenceInputs,
+        options: LiteRTLMRuntimeOptions
     ) async throws -> InferenceResult {
         ConsoleLog.info(
             "Queueing inference task. model=\(modelURL.path) cache=\(cacheDirectory.path) prompt_chars=\(inputs.prompt.count) image_bytes=\(inputs.imageData?.count ?? 0).",
@@ -86,6 +103,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
                 modelURL: modelURL,
                 cacheDirectory: cacheDirectory,
                 inputs: inputs,
+                options: options,
                 queuedAt: queuedAt
             )
         }.value
@@ -95,6 +113,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         modelURL: URL,
         cacheDirectory: URL,
         inputs: InferenceInputs,
+        options: LiteRTLMRuntimeOptions,
         queuedAt: TimeInterval? = nil
     ) throws -> InferenceResult {
         let startedAt = ProcessInfo.processInfo.systemUptime
@@ -112,18 +131,12 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             category: "Runtime"
         )
         ConsoleLog.debug("Prompt preview=\(ConsoleLog.preview(inputs.prompt)).", category: "Runtime")
-#if DEBUG
-        let environment = ProcessInfo.processInfo.environment
-#else
-        let environment: [String: String] = [:]
-#endif
+
         let runtimeCacheDirectory = Self.runtimeCacheDirectory(
             baseDirectory: cacheDirectory,
-            environment: environment
+            options: options
         )
-        // 0=VERBOSE, 1=DEBUG, 2=INFO, 3=WARNING, 4=ERROR, 5=FATAL, 1000=SILENT.
-        let minLogLevel = environment["LITERT_LM_MIN_LOG_LEVEL"].flatMap(Int32.init) ?? 3
-        litert_lm_set_min_log_level(minLogLevel)
+        litert_lm_set_min_log_level(options.minLogLevel.rawValue)
 
         try FileManager.default.createDirectory(at: runtimeCacheDirectory, withIntermediateDirectories: true)
         ConsoleLog.debug(
@@ -132,23 +145,20 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         )
         timing.mark("cache_prepare")
 
-        let backendName = Self.resolvedBackendName(environment: environment)
-        let normalizedBackendName = backendName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let visionBackendName = Self.resolvedVisionBackendName(
-            environment: environment,
-            mainBackendName: normalizedBackendName,
+        let backend = options.backend
+        let resolvedVisionBackend = Self.resolvedVisionBackend(
+            options: options,
+            modelURL: modelURL,
             hasImage: inputs.imageData != nil
         )
-        let normalizedVisionBackendName = visionBackendName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let usesVisionBackend = !normalizedVisionBackendName.isEmpty
-            && normalizedVisionBackendName.lowercased() != "none"
-        let backendSource = environment["LITERT_LM_BACKEND"] == nil ? "default" : "environment"
-        let visionBackendSource = environment["LITERT_LM_VISION_BACKEND"] == nil ? "default" : "environment"
+        let visionBackendSource = options.visionBackend == nil ? "default" : "options"
+        let backendName = backend.name
+        let visionBackendName = resolvedVisionBackend?.name ?? "none"
 
         let settings = modelURL.path.withCString { modelPathPointer in
-            normalizedBackendName.withCString { backendPointer in
-                if usesVisionBackend {
-                    return normalizedVisionBackendName.withCString { visionBackendPointer in
+            backendName.withCString { backendPointer in
+                if let visionBackend = resolvedVisionBackend {
+                    return visionBackend.name.withCString { visionBackendPointer in
                         litert_lm_engine_settings_create(
                             modelPathPointer,
                             backendPointer,
@@ -172,7 +182,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         }
         defer { litert_lm_engine_settings_delete(settings) }
         ConsoleLog.info(
-            "Created engine settings backend=\(normalizedBackendName) backend_source=\(backendSource) vision_backend=\(usesVisionBackend ? normalizedVisionBackendName : "none") vision_backend_source=\(visionBackendSource).",
+            "Created engine settings backend=\(backendName) vision_backend=\(visionBackendName)(\(visionBackendSource)).",
             category: "Runtime"
         )
         timing.mark("engine_settings_create")
@@ -186,135 +196,120 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             category: "Runtime"
         )
 
-        let maxNumImages = environment["LITERT_LM_MAX_NUM_IMAGES"].flatMap(Int32.init) ?? 1
-        litert_lm_engine_settings_set_max_num_images(settings, maxNumImages)
+        litert_lm_engine_settings_set_max_num_images(settings, options.maxNumImages)
 
-        let activationDataType = environment["LITERT_LM_ACTIVATION_DATA_TYPE"].flatMap(Int32.init)
-        if let activationDataType {
-            litert_lm_engine_settings_set_activation_data_type(settings, activationDataType)
+        if let activationDataType = options.activationDataType {
+            litert_lm_engine_settings_set_activation_data_type(settings, activationDataType.rawValue)
         }
-        let mainActivationDataType = Self.resolvedMainActivationDataType(
-            environment: environment,
-            mainBackendName: normalizedBackendName,
-            globalActivationDataType: activationDataType
+        let resolvedMainActivationDataType = Self.resolvedMainActivationDataType(
+            options: options,
+            backend: backend
         )
-        if let mainActivationDataType {
-            litert_lm_engine_settings_set_main_activation_data_type(settings, mainActivationDataType)
+        if let resolvedMainActivationDataType {
+            litert_lm_engine_settings_set_main_activation_data_type(settings, resolvedMainActivationDataType.rawValue)
         }
-        if let visionActivationDataType = environment["LITERT_LM_VISION_ACTIVATION_DATA_TYPE"].flatMap(Int32.init) {
-            litert_lm_engine_settings_set_vision_activation_data_type(settings, visionActivationDataType)
+        if let visionActivationDataType = options.visionActivationDataType {
+            litert_lm_engine_settings_set_vision_activation_data_type(settings, visionActivationDataType.rawValue)
         }
-        if let audioActivationDataType = environment["LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE"].flatMap(Int32.init) {
-            litert_lm_engine_settings_set_audio_activation_data_type(settings, audioActivationDataType)
-        }
-
-        let maxNumTokens = Self.resolvedMaxNumTokens(
-            environment: environment,
-            mainBackendName: normalizedBackendName
-        )
-        if let maxNumTokens {
-            litert_lm_engine_settings_set_max_num_tokens(settings, maxNumTokens)
+        if let audioActivationDataType = options.audioActivationDataType {
+            litert_lm_engine_settings_set_audio_activation_data_type(settings, audioActivationDataType.rawValue)
         }
 
-        if let prefillChunkSize = environment["LITERT_LM_PREFILL_CHUNK_SIZE"].flatMap(Int32.init) {
+        let resolvedMaxNumTokens = Self.resolvedMaxNumTokens(options: options, backend: backend)
+        if let resolvedMaxNumTokens {
+            litert_lm_engine_settings_set_max_num_tokens(settings, resolvedMaxNumTokens)
+        }
+
+        if let prefillChunkSize = options.prefillChunkSize {
             litert_lm_engine_settings_set_prefill_chunk_size(settings, prefillChunkSize)
         }
 
-        if let rawPrefillBatchSizes = environment["LITERT_LM_PREFILL_BATCH_SIZES"] {
-            if let prefillBatchSizes = Self.prefillBatchSizes(rawPrefillBatchSizes) {
-                prefillBatchSizes.withUnsafeBufferPointer { buffer in
-                    litert_lm_engine_settings_set_prefill_batch_sizes(
-                        settings,
-                        buffer.baseAddress,
-                        Int32(buffer.count)
-                    )
-                }
-            } else {
-                ConsoleLog.error(
-                    "Ignoring invalid LITERT_LM_PREFILL_BATCH_SIZES=\(rawPrefillBatchSizes).",
-                    category: "Runtime"
+        if let prefillBatchSizes = options.prefillBatchSizes, !prefillBatchSizes.isEmpty {
+            prefillBatchSizes.withUnsafeBufferPointer { buffer in
+                litert_lm_engine_settings_set_prefill_batch_sizes(
+                    settings,
+                    buffer.baseAddress,
+                    Int32(buffer.count)
                 )
             }
         }
 
-        let defaultAdvancedBoolValues = Self.defaultAdvancedBoolValues(
-            modelURL: modelURL,
-            mainBackendName: normalizedBackendName
-        )
-        for advancedBoolSetting in Self.advancedBoolSettings {
-            if let enabled = Self.resolvedBoolSetting(
-                advancedBoolSetting.environmentKey,
-                environment: environment,
-                defaultValues: defaultAdvancedBoolValues
-            ) {
+        let resolvedAdvancedBools = Self.advancedBoolDescriptors.map { descriptor in
+            (descriptor: descriptor,
+             resolved: descriptor.resolve(options: options.advanced, modelURL: modelURL, backend: backend))
+        }
+        for entry in resolvedAdvancedBools {
+            if let value = entry.resolved?.value {
                 litert_lm_engine_settings_set_advanced_bool(
                     settings,
-                    advancedBoolSetting.option,
-                    enabled
+                    entry.descriptor.option,
+                    value
                 )
             }
         }
-        let defaultVisionGpuBoolValues = Self.defaultVisionGpuBoolValues(
-            visionBackendName: usesVisionBackend ? normalizedVisionBackendName : nil
-        )
-        for advancedBoolSetting in Self.visionGpuBoolSettings {
-            if let enabled = Self.resolvedBoolSetting(
-                advancedBoolSetting.environmentKey,
-                environment: environment,
-                defaultValues: defaultVisionGpuBoolValues
-            ) {
+        let resolvedVisionGpuBools = Self.visionGpuBoolDescriptors.map { descriptor in
+            (descriptor: descriptor,
+             resolved: descriptor.resolve(options: options.visionGPU, visionBackend: resolvedVisionBackend))
+        }
+        for entry in resolvedVisionGpuBools {
+            if let value = entry.resolved?.value {
                 litert_lm_engine_settings_set_vision_gpu_bool(
                     settings,
-                    advancedBoolSetting.option,
-                    enabled
+                    entry.descriptor.option,
+                    value
                 )
             }
         }
 
-        if let externalTensorMode = environment["LITERT_LM_GPU_EXTERNAL_TENSOR_MODE"].flatMap(Bool.init) {
+        if let externalTensorMode = options.gpuExternalTensorMode {
             litert_lm_engine_settings_set_gpu_external_tensor_mode(settings, externalTensorMode)
         }
-        if let hintKernelBatchSize = environment["LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE"].flatMap(Int32.init) {
+        if let hintKernelBatchSize = options.gpuHintKernelBatchSize {
             litert_lm_engine_settings_set_gpu_hint_kernel_batch_size(settings, hintKernelBatchSize)
         }
 
-        let defaultCPUKernelModeName = Self.defaultCPUKernelModeName(
+        let resolvedCpuKernelMode = Self.resolvedCpuKernelMode(
+            options: options,
             modelURL: modelURL,
-            backendName: normalizedBackendName,
-            visionBackendName: usesVisionBackend ? normalizedVisionBackendName : nil
+            backend: backend,
+            visionBackend: resolvedVisionBackend
         )
-        let cpuKernelModeName = environment["LITERT_LM_CPU_KERNEL_MODE"] ?? defaultCPUKernelModeName
-        if let cpuKernelMode = Self.cpuKernelModeValue(cpuKernelModeName) {
-            litert_lm_engine_settings_set_cpu_kernel_mode(settings, cpuKernelMode)
-        } else if let cpuKernelModeName, !cpuKernelModeName.isEmpty {
-            ConsoleLog.error(
-                "Ignoring invalid LITERT_LM_CPU_KERNEL_MODE=\(cpuKernelModeName).",
-                category: "Runtime"
-            )
+        if let resolvedCpuKernelMode {
+            litert_lm_engine_settings_set_cpu_kernel_mode(settings, resolvedCpuKernelMode.rawValue)
         }
 
-        if let parallelLoading = environment["LITERT_LM_PARALLEL_LOADING"].flatMap(Bool.init) {
+        if let parallelLoading = options.parallelLoading {
             litert_lm_engine_settings_set_parallel_file_section_loading(settings, parallelLoading)
         }
 
-        let benchmarkEnabled = environment["LITERT_LM_BENCHMARK"].flatMap(Bool.init) ?? true
-        if benchmarkEnabled {
+        if options.benchmark {
             litert_lm_engine_settings_enable_benchmark(settings)
         }
-        let advancedLog = Self.advancedBoolSettings
-            .map {
-                "\($0.environmentKey)=\(Self.boolSettingLogValue($0.environmentKey, environment: environment, defaultValues: defaultAdvancedBoolValues))"
-            }
+        let advancedLog = resolvedAdvancedBools
+            .map { "\($0.descriptor.name)=\($0.resolved?.formatted ?? "unset")" }
             .joined(separator: " ")
-        let visionGpuLog = Self.visionGpuBoolSettings
-            .map {
-                "\($0.environmentKey)=\(Self.boolSettingLogValue($0.environmentKey, environment: environment, defaultValues: defaultVisionGpuBoolValues))"
-            }
+        let visionGpuLog = resolvedVisionGpuBools
+            .map { "\($0.descriptor.name)=\($0.resolved?.formatted ?? "unset")" }
             .joined(separator: " ")
-        ConsoleLog.debug(
-            "Applied engine settings: max_num_images=\(maxNumImages) activation_data_type=\(activationDataType.map(String.init) ?? "default") main_activation_data_type=\(mainActivationDataType.map(String.init) ?? "default") vision_activation_data_type=\(environment["LITERT_LM_VISION_ACTIVATION_DATA_TYPE"] ?? "default") audio_activation_data_type=\(environment["LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE"] ?? "default") max_num_tokens=\(maxNumTokens.map(String.init) ?? "default") prefill_chunk_size=\(environment["LITERT_LM_PREFILL_CHUNK_SIZE"] ?? "default") prefill_batch_sizes=\(environment["LITERT_LM_PREFILL_BATCH_SIZES"] ?? "default") gpu_external_tensor_mode=\(environment["LITERT_LM_GPU_EXTERNAL_TENSOR_MODE"] ?? "default") gpu_hint_kernel_batch_size=\(environment["LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE"] ?? "default") cpu_kernel_mode=\(cpuKernelModeName ?? "default") parallel_loading=\(environment["LITERT_LM_PARALLEL_LOADING"] ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled") cache_subdirectory=\(environment["LITERT_LM_CACHE_SUBDIRECTORY"] ?? "default") \(advancedLog) \(visionGpuLog).",
-            category: "Runtime"
-        )
+        let coreLog = [
+            "max_num_images=\(options.maxNumImages)",
+            "max_num_tokens=\(formatOptional(resolvedMaxNumTokens))",
+            "activation_data_type=\(formatOptional(options.activationDataType))",
+            "main_activation_data_type=\(formatOptional(resolvedMainActivationDataType))",
+            "vision_activation_data_type=\(formatOptional(options.visionActivationDataType))",
+            "audio_activation_data_type=\(formatOptional(options.audioActivationDataType))",
+            "prefill_chunk_size=\(formatOptional(options.prefillChunkSize))",
+            "prefill_batch_sizes=\(options.prefillBatchSizes.map { $0.map(String.init).joined(separator: ",") } ?? "unset")",
+            "gpu_external_tensor_mode=\(formatOptional(options.gpuExternalTensorMode))",
+            "gpu_hint_kernel_batch_size=\(formatOptional(options.gpuHintKernelBatchSize))",
+            "cpu_kernel_mode=\(formatOptional(resolvedCpuKernelMode))",
+            "parallel_loading=\(formatOptional(options.parallelLoading))",
+            "benchmark=\(options.benchmark ? "enabled" : "disabled")",
+            "cache_subdirectory=\(options.cacheSubdirectory ?? "unset")",
+        ].joined(separator: " ")
+        ConsoleLog.debug("Applied engine settings: \(coreLog).", category: "Runtime")
+        ConsoleLog.debug("Advanced bool settings: \(advancedLog).", category: "Runtime")
+        ConsoleLog.debug("Vision-GPU bool settings: \(visionGpuLog).", category: "Runtime")
 
         runtimeCacheDirectory.path.withCString { cachePointer in
             litert_lm_engine_settings_set_cache_dir(settings, cachePointer)
@@ -322,7 +317,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         ConsoleLog.debug("Configured engine cache directory=\(runtimeCacheDirectory.path).", category: "Runtime")
         timing.mark(
             "engine_settings_configure",
-            metadata: "backend=\(normalizedBackendName) vision_backend=\(usesVisionBackend ? normalizedVisionBackendName : "none") max_num_tokens=\(maxNumTokens.map(String.init) ?? "default") benchmark=\(benchmarkEnabled ? "enabled" : "disabled")"
+            metadata: "backend=\(backendName) vision_backend=\(visionBackendName) max_num_tokens=\(formatOptional(resolvedMaxNumTokens)) benchmark=\(options.benchmark ? "enabled" : "disabled")"
         )
 
         guard let engine = litert_lm_engine_create(settings) else {
@@ -349,12 +344,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
 
         litert_lm_conversation_config_set_session_config(conversationConfig, sessionConfig)
 
-        let systemMessageJSON =
-            #"{"type":"text","text":"You are a concise assistant running entirely on-device. Answer clearly and directly."}"#
-        systemMessageJSON.withCString { pointer in
-            litert_lm_conversation_config_set_system_message(conversationConfig, pointer)
-        }
-        ConsoleLog.info("Configured conversation config (session + system message).", category: "Runtime")
+        ConsoleLog.info("Configured conversation config (session only).", category: "Runtime")
         timing.mark("conversation_configure")
 
         guard let conversation = litert_lm_conversation_create(engine, conversationConfig) else {
@@ -365,7 +355,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         timing.mark("conversation_create")
 
         let messageJSON = try Self.makeUserMessageJSON(inputs: inputs)
-        let extraContextJSON = #"{"enable_thinking":false}"#
+        let extraContextJSON = #"{}"#
         ConsoleLog.debug("Message JSON=\(ConsoleLog.preview(messageJSON, limit: 200)).", category: "Runtime")
         ConsoleLog.debug("Extra context JSON=\(extraContextJSON).", category: "Runtime")
         timing.mark("message_json_encode", metadata: "json_chars=\(messageJSON.count)")
@@ -518,164 +508,178 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         return normalizedText
     }
 
-    private static func defaultCPUKernelModeName(
+    private static func resolvedVisionBackend(
+        options: LiteRTLMRuntimeOptions,
         modelURL: URL,
-        backendName: String,
-        visionBackendName: String?
-    ) -> String? {
-        let usesMainCPU = backendName.lowercased() == "cpu"
-        let usesVisionGPU = visionBackendName?.lowercased() == "gpu"
-        let modelName = modelURL.lastPathComponent.lowercased()
-        guard usesMainCPU, usesVisionGPU, modelName.contains("e4b") else { return nil }
-        return "builtin"
-    }
-
-    private static func resolvedBackendName(environment: [String: String]) -> String {
-        environment["LITERT_LM_BACKEND"] ?? "gpu"
-    }
-
-    private static func resolvedVisionBackendName(
-        environment: [String: String],
-        mainBackendName: String,
         hasImage: Bool
-    ) -> String {
-        if let visionBackendName = environment["LITERT_LM_VISION_BACKEND"] {
-            return visionBackendName
+    ) -> LiteRTLMBackend? {
+        if let explicit = options.visionBackend {
+            return explicit
         }
-
-        guard hasImage else { return "none" }
-        return mainBackendName.lowercased() == "gpu" ? "gpu" : "cpu"
+        guard hasImage else { return nil }
+        // Gemma 4 vision encoders (both E2B and E4B) produce semantically wrong
+        // embeddings when run on Metal GPU with FP16 activations (the C
+        // wrapper's current memory-saving default — verified by the dog photo
+        // being described as "people"/"a person's face"). FP32 vision GPU is
+        // correct but exceeds iOS cold-start memory limits when paired with
+        // the GPU main executor. Default to CPU vision for these models to
+        // preserve correctness; callers can override via options.visionBackend.
+        if isGemma4Vision(modelURL: modelURL) {
+            return .cpu
+        }
+        return options.backend == .gpu ? .gpu : .cpu
     }
 
     private static func resolvedMainActivationDataType(
-        environment: [String: String],
-        mainBackendName: String,
-        globalActivationDataType: Int32?
-    ) -> Int32? {
-        if let mainActivationDataType = environment["LITERT_LM_MAIN_ACTIVATION_DATA_TYPE"].flatMap(Int32.init) {
-            return mainActivationDataType
+        options: LiteRTLMRuntimeOptions,
+        backend: LiteRTLMBackend
+    ) -> LiteRTLMActivationDataType? {
+        if let explicit = options.mainActivationDataType {
+            return explicit
         }
-
-        guard globalActivationDataType == nil, mainBackendName.lowercased() == "gpu" else {
-            return nil
-        }
-        return 1
+        guard options.activationDataType == nil, backend == .gpu else { return nil }
+        return .float16
     }
 
     private static func resolvedMaxNumTokens(
-        environment: [String: String],
-        mainBackendName: String
+        options: LiteRTLMRuntimeOptions,
+        backend: LiteRTLMBackend
     ) -> Int32? {
-        if let maxNumTokens = environment["LITERT_LM_MAX_NUM_TOKENS"].flatMap(Int32.init) {
-            return maxNumTokens
+        if let explicit = options.maxNumTokens {
+            return explicit
         }
-
-        guard mainBackendName.lowercased() == "gpu" else { return nil }
+        guard backend == .gpu else { return nil }
         return 384
     }
 
-    private static func cpuKernelModeValue(_ value: String?) -> Int32? {
-        guard let value else { return nil }
-        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "0", "xnnpack":
-            return 0
-        case "1", "reference":
-            return 1
-        case "2", "builtin", "built-in":
-            return 2
-        default:
-            return nil
+    private static func resolvedCpuKernelMode(
+        options: LiteRTLMRuntimeOptions,
+        modelURL: URL,
+        backend: LiteRTLMBackend,
+        visionBackend: LiteRTLMBackend?
+    ) -> LiteRTLMCPUKernelMode? {
+        if let explicit = options.cpuKernelMode {
+            return explicit
+        }
+        guard backend == .cpu, visionBackend == .gpu, isE4B(modelURL: modelURL) else { return nil }
+        return .builtin
+    }
+
+    private static func isE4B(modelURL: URL) -> Bool {
+        modelURL.lastPathComponent.lowercased().contains("e4b")
+    }
+
+    private static func isGemma4Vision(modelURL: URL) -> Bool {
+        let name = modelURL.lastPathComponent.lowercased()
+        return name.contains("e2b") || name.contains("e4b")
+    }
+
+    /// Resolved value for a bool descriptor, with provenance for logging.
+    private struct ResolvedBool {
+        let value: Bool
+        let isDefault: Bool
+
+        var formatted: String {
+            isDefault ? "\(value)(default)" : "\(value)"
         }
     }
 
-    private static func prefillBatchSizes(_ value: String) -> [Int32]? {
-        let parts = value.split(separator: ",", omittingEmptySubsequences: false)
-        guard !parts.isEmpty else { return nil }
-        var sizes: [Int32] = []
-        sizes.reserveCapacity(parts.count)
-        for part in parts {
-            let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let size = Int32(trimmed), size > 0 else { return nil }
-            sizes.append(size)
-        }
-        return sizes.isEmpty ? nil : sizes
-    }
+    /// Describes one entry in the upstream "advanced" bool settings table.
+    /// `getValue` reads the caller's explicit value; `getDefault` returns the
+    /// runtime's per-model fallback when the caller didn't set one.
+    private struct AdvancedBoolDescriptor {
+        let name: String
+        let option: Int32
+        let getValue: @Sendable (LiteRTLMAdvancedOptions) -> Bool?
+        let getDefault: @Sendable (URL, LiteRTLMBackend) -> Bool?
 
-    private static let advancedBoolSettings: [(environmentKey: String, option: Int32)] = [
-        ("LITERT_LM_CLEAR_KV_CACHE_BEFORE_PREFILL", 0),
-        ("LITERT_LM_GPU_MADVISE_ORIGINAL_SHARED_TENSORS", 1),
-        ("LITERT_LM_GPU_CONVERT_WEIGHTS_ON_GPU", 2),
-        ("LITERT_LM_GPU_WAIT_FOR_WEIGHTS_CONVERSION_COMPLETE_IN_BENCHMARK", 3),
-        ("LITERT_LM_GPU_OPTIMIZE_SHADER_COMPILATION", 4),
-        ("LITERT_LM_GPU_CACHE_COMPILED_SHADERS_ONLY", 5),
-        ("LITERT_LM_GPU_SHARE_CONSTANT_TENSORS", 6),
-        ("LITERT_LM_SAMPLER_HANDLES_INPUT", 7),
-        ("LITERT_LM_GPU_ALLOW_SRC_QUANTIZED_FC_CONV_OPS", 8),
-        ("LITERT_LM_GPU_HINT_WAITING_FOR_COMPLETION", 9),
-        ("LITERT_LM_GPU_CONTEXT_LOW_PRIORITY", 10),
-        ("LITERT_LM_GPU_DISABLE_DELEGATE_CLUSTERING", 11),
-    ]
-
-    private static let visionGpuBoolSettings: [(environmentKey: String, option: Int32)] = [
-        ("LITERT_LM_VISION_GPU_MADVISE_ORIGINAL_SHARED_TENSORS", 1),
-        ("LITERT_LM_VISION_GPU_CONVERT_WEIGHTS_ON_GPU", 2),
-        ("LITERT_LM_VISION_GPU_CACHE_COMPILED_SHADERS_ONLY", 5),
-        ("LITERT_LM_VISION_GPU_SHARE_CONSTANT_TENSORS", 6),
-    ]
-
-    private static func defaultAdvancedBoolValues(modelURL: URL, mainBackendName: String) -> [String: Bool] {
-        guard mainBackendName.lowercased() == "gpu" else { return [:] }
-        var values = [
-            "LITERT_LM_GPU_CACHE_COMPILED_SHADERS_ONLY": true,
-        ]
-        if modelURL.lastPathComponent.lowercased().contains("e4b") {
-            values["LITERT_LM_GPU_CONVERT_WEIGHTS_ON_GPU"] = false
-        }
-        return values
-    }
-
-    private static func defaultVisionGpuBoolValues(visionBackendName: String?) -> [String: Bool] {
-        guard visionBackendName?.lowercased() == "gpu" else { return [:] }
-        return [
-            "LITERT_LM_VISION_GPU_CACHE_COMPILED_SHADERS_ONLY": true,
-        ]
-    }
-
-    private static func resolvedBoolSetting(
-        _ environmentKey: String,
-        environment: [String: String],
-        defaultValues: [String: Bool]
-    ) -> Bool? {
-        if let rawValue = environment[environmentKey] {
-            if let enabled = Bool(rawValue) {
-                return enabled
+        func resolve(options: LiteRTLMAdvancedOptions, modelURL: URL, backend: LiteRTLMBackend) -> ResolvedBool? {
+            if let explicit = getValue(options) {
+                return ResolvedBool(value: explicit, isDefault: false)
             }
-            ConsoleLog.error(
-                "Ignoring invalid \(environmentKey)=\(rawValue).",
-                category: "Runtime"
-            )
+            if let fallback = getDefault(modelURL, backend) {
+                return ResolvedBool(value: fallback, isDefault: true)
+            }
             return nil
         }
-
-        return defaultValues[environmentKey]
     }
 
-    private static func boolSettingLogValue(
-        _ environmentKey: String,
-        environment: [String: String],
-        defaultValues: [String: Bool]
-    ) -> String {
-        if let rawValue = environment[environmentKey] {
-            return rawValue
+    private struct VisionGpuBoolDescriptor {
+        let name: String
+        let option: Int32
+        let getValue: @Sendable (LiteRTLMVisionGPUOptions) -> Bool?
+        let getDefault: @Sendable (LiteRTLMBackend?) -> Bool?
+
+        func resolve(options: LiteRTLMVisionGPUOptions, visionBackend: LiteRTLMBackend?) -> ResolvedBool? {
+            if let explicit = getValue(options) {
+                return ResolvedBool(value: explicit, isDefault: false)
+            }
+            if let fallback = getDefault(visionBackend) {
+                return ResolvedBool(value: fallback, isDefault: true)
+            }
+            return nil
         }
-        if let defaultValue = defaultValues[environmentKey] {
-            return "\(defaultValue)(default)"
-        }
-        return "default"
     }
 
-    private static func runtimeCacheDirectory(baseDirectory: URL, environment: [String: String]) -> URL {
-        guard let rawSubdirectory = environment["LITERT_LM_CACHE_SUBDIRECTORY"] else {
+    private static let advancedBoolDescriptors: [AdvancedBoolDescriptor] = [
+        .init(name: "clearKvCacheBeforePrefill", option: 0,
+              getValue: { $0.clearKvCacheBeforePrefill },
+              getDefault: { _, _ in nil }),
+        .init(name: "gpuMadviseOriginalSharedTensors", option: 1,
+              getValue: { $0.gpuMadviseOriginalSharedTensors },
+              getDefault: { _, _ in nil }),
+        .init(name: "gpuConvertWeightsOnGpu", option: 2,
+              getValue: { $0.gpuConvertWeightsOnGpu },
+              getDefault: { modelURL, backend in
+                  guard backend == .gpu, isE4B(modelURL: modelURL) else { return nil }
+                  return false
+              }),
+        .init(name: "gpuWaitForWeightsConversionCompleteInBenchmark", option: 3,
+              getValue: { $0.gpuWaitForWeightsConversionCompleteInBenchmark },
+              getDefault: { _, _ in nil }),
+        .init(name: "gpuOptimizeShaderCompilation", option: 4,
+              getValue: { $0.gpuOptimizeShaderCompilation },
+              getDefault: { _, _ in nil }),
+        .init(name: "gpuCacheCompiledShadersOnly", option: 5,
+              getValue: { $0.gpuCacheCompiledShadersOnly },
+              getDefault: { _, backend in backend == .gpu ? true : nil }),
+        .init(name: "gpuShareConstantTensors", option: 6,
+              getValue: { $0.gpuShareConstantTensors },
+              getDefault: { _, _ in nil }),
+        .init(name: "samplerHandlesInput", option: 7,
+              getValue: { $0.samplerHandlesInput },
+              getDefault: { _, _ in nil }),
+        .init(name: "gpuAllowSrcQuantizedFcConvOps", option: 8,
+              getValue: { $0.gpuAllowSrcQuantizedFcConvOps },
+              getDefault: { _, _ in nil }),
+        .init(name: "gpuHintWaitingForCompletion", option: 9,
+              getValue: { $0.gpuHintWaitingForCompletion },
+              getDefault: { _, _ in nil }),
+        .init(name: "gpuContextLowPriority", option: 10,
+              getValue: { $0.gpuContextLowPriority },
+              getDefault: { _, _ in nil }),
+        .init(name: "gpuDisableDelegateClustering", option: 11,
+              getValue: { $0.gpuDisableDelegateClustering },
+              getDefault: { _, _ in nil }),
+    ]
+
+    private static let visionGpuBoolDescriptors: [VisionGpuBoolDescriptor] = [
+        .init(name: "madviseOriginalSharedTensors", option: 1,
+              getValue: { $0.madviseOriginalSharedTensors },
+              getDefault: { _ in nil }),
+        .init(name: "convertWeightsOnGpu", option: 2,
+              getValue: { $0.convertWeightsOnGpu },
+              getDefault: { _ in nil }),
+        .init(name: "cacheCompiledShadersOnly", option: 5,
+              getValue: { $0.cacheCompiledShadersOnly },
+              getDefault: { visionBackend in visionBackend == .gpu ? true : nil }),
+        .init(name: "shareConstantTensors", option: 6,
+              getValue: { $0.shareConstantTensors },
+              getDefault: { _ in nil }),
+    ]
+
+    private static func runtimeCacheDirectory(baseDirectory: URL, options: LiteRTLMRuntimeOptions) -> URL {
+        guard let rawSubdirectory = options.cacheSubdirectory else {
             return baseDirectory
         }
         let sanitizedSubdirectory = rawSubdirectory
@@ -685,7 +689,7 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             }
         guard !sanitizedSubdirectory.isEmpty else {
             ConsoleLog.error(
-                "Ignoring invalid LITERT_LM_CACHE_SUBDIRECTORY=\(rawSubdirectory).",
+                "Ignoring invalid cacheSubdirectory=\(rawSubdirectory).",
                 category: "Runtime"
             )
             return baseDirectory
@@ -708,6 +712,11 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
             )
         } ?? Bundle.main.privateFrameworksURL ?? frameworkDirectory
     }
+}
+
+private func formatOptional<T>(_ value: T?) -> String {
+    guard let value else { return "unset" }
+    return String(describing: value)
 }
 
 private struct LiteRTLMRuntimeError: LocalizedError {

@@ -13,42 +13,62 @@ This note captures the May 2026 iPhone comparison between this sample app and Go
 
 ## Current sample app behavior
 
-The sample app currently runs E4B as:
+The sample app's `LiteRTLMRuntimeOptions()` resolves to this profile for an E4B image prompt:
 
 ```text
 backend=gpu
-vision_backend=gpu when an image is attached
+vision_backend=cpu                     # Gemma 4 default (see "Vision encoder correctness")
 main_activation_data_type=FLOAT16
 max_num_tokens=384
 max_output_tokens=256
-gpu_convert_weights_on_gpu=false
+gpu_convert_weights_on_gpu=false       # E4B default
 gpu_cache_compiled_shaders_only=true
-vision_gpu_cache_compiled_shaders_only=true
 benchmark=enabled
 ```
 
-This is now the normal sample-app path; no `LITERT_LM_*` environment variables are required for a regular launch to choose GPU/GPU. DEBUG builds still accept those variables as diagnostic overrides.
+This is the normal sample-app path. There are no environment-variable overrides; per-call tuning happens through `LiteRTLMRuntimeOptions`. To run E4B with the all-GPU profile that this document originally tracked, mutate the struct before calling:
 
-Representative app log:
-
-```text
-Created engine settings backend=gpu backend_source=default vision_backend=gpu vision_backend_source=default.
-TIMING runtime phase=engine_settings_configure ... backend=gpu vision_backend=gpu max_num_tokens=384 benchmark=enabled.
-Applied engine settings ... LITERT_LM_GPU_CONVERT_WEIGHTS_ON_GPU=false(default) ... LITERT_LM_GPU_CACHE_COMPILED_SHADERS_ONLY=true(default) ... LITERT_LM_VISION_GPU_CACHE_COMPILED_SHADERS_ONLY=true(default).
+```swift
+var options = LiteRTLMRuntimeOptions()
+options.visionBackend = .gpu                       // override the Gemma 4 CPU default
+options.visionActivationDataType = .float32        // see "Vision encoder correctness"
+let result = try await runtime.generateResponse(
+    modelURL: modelURL, cacheDirectory: cacheDirectory,
+    inputs: inputs, options: options
+)
 ```
 
-Observed successful smoke tests:
+Representative app log for a default Gemma 4 image prompt:
 
-- E4B + JPG on iPhone 16 Pro Max: passed with default `backend=gpu`, `vision_backend=gpu`.
-- E4B + PNG on iPhone 16 Pro Max: passed with `backend=gpu`, `vision_backend=gpu`.
-- E2B + JPG regression: passed with `backend=gpu`, `vision_backend=gpu`.
-- Vision correctness on iPhone 17 Pro Max depended on Edge-style image pre-resize: the dog test photo at full `4032x2268` was normalized to a `1523765` byte JPEG and E4B answered that no animal was visible; the same photo resized to `1024x576` before JPEG normalization produced "A small dog is visible in the image." and "A dog is visible in this image."
-- A no-env E4B smoke run on iPhone 16 Pro Max completed in `24.831s` total with `conversation_send_and_parse=16.779s`; LiteRT benchmark reported `init=15.59s`, `ttft=5.42s`, `prefill=286t/53.63tps/5.33s`, and `decode=98t/11.04tps/8.88s`.
-- On iPhone 17 Pro Max, a cold cache using full serialized GPU artifacts was killed by iOS with signal 9 immediately after `message_json_encode` at about `3104 MB` process physical footprint. Rerunning the same cache passed, which showed the failure was the cold-cache GPU artifact path rather than steady-state inference. A fresh cache with compiled-shaders-only enabled for both main and vision GPU passed on the first run in `11.587s` total, with `conversation_send_and_parse=5.629s`. After making that setting the default, a UI-path run still crashed at about `3112 MB`, so the current E4B default also sets main `convert_weights_on_gpu=false`. With that setting, an iPhone 17 Pro Max fresh-cache smoke run passed with pre-`send_message` footprint about `2899 MB`, `conversation_send_and_parse=5.931s`, and total runtime `21.583s`.
+```text
+Created engine settings backend=gpu vision_backend=cpu(default).
+TIMING runtime phase=engine_settings_configure ... backend=gpu vision_backend=cpu max_num_tokens=384 benchmark=enabled.
+Applied engine settings: max_num_images=1 max_num_tokens=384 main_activation_data_type=float16 ... .
+Advanced bool settings: ... gpuConvertWeightsOnGpu=false(default) ... gpuCacheCompiledShadersOnly=true(default) ... .
+Vision-GPU bool settings: ... cacheCompiledShadersOnly=unset ... .
+```
+
+(`cacheCompiledShadersOnly` resolves to `unset` here because vision is CPU; on the diagnostic vision-GPU path it resolves to `true(default)`.)
+
+Observed smoke tests on iPhone 16 Pro Max:
+
+- E4B + PNG with default options (`backend=gpu`, `vision_backend=cpu`): passes; the dog photo is correctly identified as "a white dog ... sleeping soundly".
+- E2B + PNG with default options: passes; the dog photo is correctly identified as "a dog sleeping peacefully".
+- E4B + PNG with `options.visionBackend = .gpu` (FP16 default): completes but produces "a crowd of people" — wrong.
+- E2B + PNG with `options.visionBackend = .gpu` (FP16 default): completes but produces "a person's face and upper body" — wrong.
+- E4B + PNG with `options.visionBackend = .gpu` and `options.visionActivationDataType = .float32`: warm-cache run produces "a white dog sleeping" — correct; cold-cache run is killed by iOS with signal 9.
+- A no-override E4B smoke run on iPhone 16 Pro Max completes in roughly `14s` total with `conversation_send_and_parse` around `12s`.
+- On iPhone 17 Pro Max, a cold cache using full serialized GPU artifacts was killed by iOS with signal 9 immediately after `message_json_encode` at about `3104 MB` process physical footprint. The runtime defaults set `gpuCacheCompiledShadersOnly = true` on both main and vision GPU executors and `gpuConvertWeightsOnGpu = false` for E4B specifically; with those, an iPhone 17 Pro Max fresh-cache smoke run completed at pre-`send_message` footprint around `2899 MB`.
+
+## Vision encoder correctness
+
+The local C wrapper forces vision GPU activations to FP16 to dodge a Metal texture-allocation ceiling. Upstream LiteRT-LM's vision executor defaults to FP32 "for backward compatibility with previous launched models", and the Gemma 4 family was launched expecting that default. Forcing FP16 produces semantically wrong embeddings on Metal — the dog test photo is described as "a crowd of people" (E4B) or "a person's face and upper body" (E2B). Forcing FP32 vision (`options.visionActivationDataType = .float32`) restores correctness but exceeds iOS cold-start memory limits when paired with the GPU main executor.
+
+CPU vision sidesteps both failure modes: correct embeddings, no Metal memory pressure. That is why the sample app's default for Gemma 4 image prompts is `vision_backend=cpu`.
 
 ## Why the sample app can still be slower than Edge Gallery
 
-The old minutes-long path was caused by CPU fallback in the sample app runtime defaults. That fallback is no longer the default. If a current build takes minutes, check the runtime log line that starts with `Created engine settings`; it should show `backend=gpu backend_source=default vision_backend=gpu vision_backend_source=default` for image prompts.
+The old minutes-long path was caused by CPU fallback in the sample app runtime defaults. That fallback is no longer the default. If a current build takes minutes, check the runtime log line that starts with `Created engine settings`; for a default Gemma 4 image prompt it should show `backend=gpu vision_backend=cpu(default)`.
 
 The remaining performance gap versus Edge Gallery is from other factors:
 
@@ -181,17 +201,11 @@ The performance gap is not primarily an image-size issue. Edge Gallery is fast b
 - Parallel section loading.
 - A different Google-hosted E4B model artifact than the sample app's Hugging Face artifact.
 
-As of 2026-05-02, E4B can complete with main `gpu` and vision `gpu` on the iPhone 16 Pro Max. The sample app now uses that path by default for image prompts. The decisive native fix was to release the compiled vision executor resources after image encoding and before LLM prefill. Before that release, the process reached the first `prefill_128` per-layer embedding lookup and was killed by iOS. After the release, the same public Hugging Face E4B artifact completes all three prefill chunks.
+As of 2026-05-02, E4B can complete with main `gpu` and vision `gpu` on the iPhone 16 Pro Max. The sample app does **not** use that profile by default for Gemma 4 image prompts because the FP16 vision encoder produces semantically wrong embeddings on Metal (see "Vision encoder correctness" above). The default is GPU main + CPU vision; callers can opt into vision GPU by setting `LiteRTLMRuntimeOptions.visionBackend = .gpu` (and `visionActivationDataType = .float32` for correct semantics, with the cold-OOM caveat). The decisive native fix that made vision GPU possible at all was releasing the compiled vision executor resources after image encoding and before LLM prefill — without that, the process reached the first `prefill_128` per-layer embedding lookup and was killed by iOS.
 
-This fixes correctness for all-GPU E4B on device, but it still does not make the public artifact match Edge Gallery's startup/perceived performance. Edge Gallery appears to use a different Google-hosted model artifact with different main signatures and no visible CPU MTP drafter path, while the public artifact still exposes `prefill_1024`, `prefill_128`, `decode`, and `verify`.
+This fixes correctness for all-GPU E4B on device when paired with FP32 vision activations, but it still does not make the public artifact match Edge Gallery's startup/perceived performance. Edge Gallery appears to use a different Google-hosted model artifact with different main signatures and no visible CPU MTP drafter path, while the public artifact still exposes `prefill_1024`, `prefill_128`, `decode`, and `verify`.
 
-The new runtime switch is:
-
-```text
-LITERT_LM_RELEASE_VISION_EXECUTOR_AFTER_ENCODE
-```
-
-On Apple platforms it defaults to enabled when the main executor backend is GPU. Set it to `0`, `false`, `no`, or `off` to disable for diagnostics. Set it to `1`, `true`, `yes`, or `on` to force the release.
+The release-vision-executor-after-encode behavior is always-on in the packaged dylib for Apple platforms when the main executor backend is GPU. There is no per-call switch.
 
 ## Next investigation path
 
@@ -201,35 +215,38 @@ To match Edge Gallery, the likely required work is one of:
 2. Add upstream LiteRT/LiteRT-LM support for compiling only the signatures that will actually be used, or for lazily compiling signatures instead of compiling the whole `tf_lite_prefill_decode` section in `CompiledModel::Create`.
 3. Investigate whether a newer internal LiteRT GPU compiler/runtime has memory behavior that the public LiteRT-LM source does not yet have.
 4. Test the upstream memory-reduction change `da1f1ceb` (`Reduce peak memory footprint by unmapping TFLite FlatBuffer for fully accelerated models`) from the LiteRT-LM remote branches. That change is not in the current local source baseline and directly targets peak memory after hardware compilation.
+5. Fix the Metal FP16 vision encoder so it stops producing wrong Gemma 4 embeddings, or expose a Metal-friendly FP32 vision path that stays under the iOS cold-start memory ceiling. That would let the sample drop the CPU-vision default for Gemma 4.
 
-The local package now exposes `LITERT_LM_PREFILL_BATCH_SIZES` for diagnostics and for models that do carry prefill-length magic numbers. It does not fix this public E4B artifact because that artifact exposes no prefill-length magic numbers for LiteRT to rewrite.
+The `LiteRTLMRuntimeOptions.prefillBatchSizes` field is exposed for models that do carry prefill-length magic numbers. It does not fix the public E4B artifact because that artifact exposes no prefill-length magic numbers for LiteRT to rewrite.
 
-The local package also exposes these diagnostic switches so future test runs can isolate upstream LiteRT GPU behavior without rebuilding:
+`LiteRTLMRuntimeOptions` exposes the full upstream tuning surface so future test runs can isolate LiteRT GPU behavior without rebuilding the dylib. The relevant per-call fields are:
 
 ```text
-LITERT_LM_BACKEND
-LITERT_LM_VISION_BACKEND
-LITERT_LM_MAX_NUM_TOKENS
-LITERT_LM_MAX_NUM_IMAGES
-LITERT_LM_BENCHMARK
-LITERT_LM_CACHE_SUBDIRECTORY
-LITERT_LM_MAIN_ACTIVATION_DATA_TYPE
-LITERT_LM_VISION_ACTIVATION_DATA_TYPE
-LITERT_LM_AUDIO_ACTIVATION_DATA_TYPE
-LITERT_LM_GPU_EXTERNAL_TENSOR_MODE
-LITERT_LM_GPU_HINT_KERNEL_BATCH_SIZE
-LITERT_LM_CLEAR_KV_CACHE_BEFORE_PREFILL
-LITERT_LM_GPU_MADVISE_ORIGINAL_SHARED_TENSORS
-LITERT_LM_GPU_CONVERT_WEIGHTS_ON_GPU
-LITERT_LM_GPU_WAIT_FOR_WEIGHTS_CONVERSION_COMPLETE_IN_BENCHMARK
-LITERT_LM_GPU_OPTIMIZE_SHADER_COMPILATION
-LITERT_LM_GPU_CACHE_COMPILED_SHADERS_ONLY
-LITERT_LM_GPU_SHARE_CONSTANT_TENSORS
-LITERT_LM_SAMPLER_HANDLES_INPUT
-LITERT_LM_GPU_ALLOW_SRC_QUANTIZED_FC_CONV_OPS
-LITERT_LM_GPU_HINT_WAITING_FOR_COMPLETION
-LITERT_LM_GPU_CONTEXT_LOW_PRIORITY
-LITERT_LM_GPU_DISABLE_DELEGATE_CLUSTERING
+backend                         visionBackend                  audioBackend (not yet exposed)
+maxNumTokens                    maxNumImages                   minLogLevel
+benchmark                       cacheSubdirectory
+activationDataType              mainActivationDataType         visionActivationDataType
+audioActivationDataType         prefillChunkSize               prefillBatchSizes
+parallelLoading                 cpuKernelMode                  gpuExternalTensorMode
+gpuHintKernelBatchSize
+
+advanced.clearKvCacheBeforePrefill
+advanced.gpuMadviseOriginalSharedTensors
+advanced.gpuConvertWeightsOnGpu
+advanced.gpuWaitForWeightsConversionCompleteInBenchmark
+advanced.gpuOptimizeShaderCompilation
+advanced.gpuCacheCompiledShadersOnly
+advanced.gpuShareConstantTensors
+advanced.samplerHandlesInput
+advanced.gpuAllowSrcQuantizedFcConvOps
+advanced.gpuHintWaitingForCompletion
+advanced.gpuContextLowPriority
+advanced.gpuDisableDelegateClustering
+
+visionGPU.madviseOriginalSharedTensors
+visionGPU.convertWeightsOnGpu
+visionGPU.cacheCompiledShadersOnly
+visionGPU.shareConstantTensors
 ```
 
 ## Useful local log artifacts

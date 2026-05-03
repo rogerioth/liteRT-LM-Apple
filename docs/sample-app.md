@@ -9,7 +9,8 @@ The sample app under `Examples/LiteRTLMAppleExample/` is the fastest way to see 
 - storing runtime cache data separately
 - running single-turn inference from SwiftUI
 - attaching a photo and running multimodal inference against Gemma 4
-- using the current GPU/GPU runtime profile by default for image prompts
+- using the GPU main / CPU vision profile by default for Gemma 4 image prompts
+- per-call configuration through the `LiteRTLMRuntimeOptions` struct
 - displaying initialization, TTFT, prefill, and decode benchmark metrics
 - printing structured runtime and download logs into the Xcode console
 - resolving the package remotely through GitHub Swift Package Manager
@@ -27,7 +28,8 @@ These models are pinned in `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/M
 - `InferenceViewModel.swift`: presentation state and action orchestration
 - `ModelStore.swift`: local file management and model downloads
 - `LiteRTLMRuntime.swift`: the Swift wrapper around the LiteRT-LM C API
-- `ImageDataNormalizer.swift`: EXIF-aware 1024px JPEG normalization for Photos picker output, including HEIC inputs
+- `LiteRTLMRuntimeOptions.swift`: per-call configuration struct passed to the runtime
+- `ImageDataNormalizer.swift`: EXIF-aware 1024px PNG normalization for Photos picker output, including HEIC inputs
 - `PhaseTiming.swift`: app-side wall-clock timing for setup, image normalization, engine creation, send, parse, and total runtime
 - `SmokeTestRunner.swift`: DEBUG-only device smoke runner used by `devicectl`
 - `ConsoleLog.swift`: structured `print` logging for Xcode
@@ -35,20 +37,21 @@ These models are pinned in `Examples/LiteRTLMAppleExample/LiteRTLMAppleExample/M
 
 ## Runtime Defaults
 
-`LiteRTLMRuntime.swift` currently uses these defaults when the app is launched normally:
+`LiteRTLMRuntimeOptions()` ships with these defaults:
 
-- main executor backend: `gpu`
-- vision backend: `gpu` when an image is attached, `none` for text-only prompts
-- max images: `1`
-- main activation data type: `1` (`FLOAT16`) for GPU main executor
-- max tokens: `384` for GPU main executor
-- E4B main GPU weight conversion: CPU-side conversion
-- main GPU cache mode: compiled shaders only
-- vision GPU cache mode: compiled shaders only
-- session max output tokens: `256`
-- benchmarking: enabled
+- `backend`: `.gpu`
+- `visionBackend`: runtime resolves to `.cpu` for Gemma 4 image prompts (E2B and E4B), otherwise mirrors `backend` when an image is attached, otherwise no vision executor
+- `maxNumImages`: `1`
+- `mainActivationDataType`: runtime resolves to `.float16` on GPU main
+- `maxNumTokens`: runtime resolves to `384` on GPU main
+- `advanced.gpuConvertWeightsOnGpu`: runtime resolves to `false` for E4B on GPU main
+- `advanced.gpuCacheCompiledShadersOnly`: runtime resolves to `true` on GPU main
+- `visionGPU.cacheCompiledShadersOnly`: runtime resolves to `true` when vision is GPU
+- `cpuKernelMode`: runtime resolves to `.builtin` for E4B main-CPU + vision-GPU; otherwise upstream default
+- session max output tokens: `256` (currently hard-coded in `LiteRTLMRuntime`)
+- `benchmark`: `true`
 
-The DEBUG build still accepts `LITERT_LM_*` environment variables for experiments from Xcode or `devicectl`, but those variables are not required for the normal sample app path.
+There are no environment-variable overrides. Per-call tuning happens through `LiteRTLMRuntimeOptions`; mutate any field on the struct before calling `generateResponse(modelURL:cacheDirectory:inputs:options:)`.
 
 ## Current Branch Setup
 

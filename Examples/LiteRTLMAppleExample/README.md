@@ -32,15 +32,41 @@ The current checked-in iOS simulator, visionOS simulator, and Catalyst artifacts
 - deterministic Hugging Face download URLs for pinned models
 - model storage under Application Support
 - cache storage under Caches
-- a small Swift wrapper around the C conversation API
-- default `gpu` main backend and `gpu` vision backend for image prompts
-- lower-memory E4B main GPU weight-conversion default
-- EXIF-aware 1024px JPEG normalization for attached images
-- compiled-shaders-only GPU cache defaults for both main and vision executors
+- a small Swift wrapper around the C conversation API (`LiteRTLMRuntime`)
+- per-call configuration through the `LiteRTLMRuntimeOptions` struct
+- defaults validated for Gemma 4 image inference: GPU main, CPU vision (Gemma 4 only), FP16 main activations, 384-token cap, lower-memory E4B weight conversion, shader-cache reuse
+- EXIF-aware 1024px PNG normalization for attached images
 - benchmark display for initialization, time to first token, prefill, and decode
 - structured `print` logging for downloads, runtime setup, inference, and errors in the Xcode console
 
-The DEBUG build also includes a smoke-test entrypoint for `devicectl` runs. Its `LITERT_LM_*` environment variables are diagnostics only; normal app launches use the defaults in `LiteRTLMRuntime.swift`.
+The DEBUG build also includes a smoke-test entrypoint for `devicectl` runs. Per-call runtime tuning happens through the `LiteRTLMRuntimeOptions` parameter on `LiteRTLMRuntime.generateResponse`; there are no environment-variable overrides.
+
+## Calling The Runtime
+
+```swift
+let runtime = LiteRTLMRuntime()
+let result = try await runtime.generateResponse(
+    modelURL: modelURL,
+    cacheDirectory: cacheDirectory,
+    inputs: InferenceInputs(prompt: "What is this?", imageData: pngData),
+    options: LiteRTLMRuntimeOptions()
+)
+```
+
+To run a diagnostic configuration, mutate the relevant fields before passing the struct in:
+
+```swift
+var options = LiteRTLMRuntimeOptions()
+options.visionBackend = .gpu                       // override the Gemma 4 CPU default
+options.visionActivationDataType = .float32        // correct embeddings, large memory
+options.minLogLevel = .info                        // see runtime startup logs
+let result = try await runtime.generateResponse(
+    modelURL: modelURL, cacheDirectory: cacheDirectory,
+    inputs: inputs, options: options
+)
+```
+
+`LiteRTLMRuntimeOptions` exposes the full upstream tuning surface (backends, activation precisions, prefill batching, kernel mode, GPU diagnostics). See its inline documentation for the complete field list and the model-aware defaults the runtime applies for `nil` fields.
 
 ## Changing The Models
 

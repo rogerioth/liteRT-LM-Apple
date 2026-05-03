@@ -41,12 +41,13 @@ enum SmokeTestRunner {
                 category: "SmokeTest"
             )
             timing.mark("image_load", metadata: "raw_bytes=\(rawImageData.count)")
-            let normalizedImageData = try ImageDataNormalizer.makeJPEGData(from: rawImageData)
-            timing.mark("image_normalize", metadata: "jpeg_bytes=\(normalizedImageData.count)")
+            let normalizedImageData = try ImageDataNormalizer.makePNGData(from: rawImageData)
+            timing.mark("image_normalize", metadata: "png_bytes=\(normalizedImageData.count)")
             let result = try await LiteRTLMRuntime().generateResponse(
                 modelURL: modelURL,
                 cacheDirectory: store.cacheDirectory,
-                inputs: InferenceInputs(prompt: prompt, imageData: normalizedImageData)
+                inputs: InferenceInputs(prompt: prompt, imageData: normalizedImageData),
+                options: LiteRTLMRuntimeOptions()
             )
             timing.mark("generate_response", metadata: "response_chars=\(result.text.count)")
 

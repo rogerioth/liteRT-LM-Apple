@@ -81,7 +81,7 @@ The main README includes a small Swift example for that flow.
 
 ## Sending An Image
 
-To attach an image to a user message, embed a base64-encoded JPEG (or any stb_image-decodable format) as the first content part:
+To attach an image to a user message, embed a base64-encoded PNG (or any other `stb_image`-decodable format) as the first content part:
 
 ```json
 {"role":"user","content":[
@@ -90,13 +90,24 @@ To attach an image to a user message, embed a base64-encoded JPEG (or any stb_im
 ]}
 ```
 
-Before creating the engine, declare a vision backend so the engine actually instantiates a vision executor, and raise the per-prompt image budget so the prefill graph reserves enough KV cache. The current sample app uses this GPU profile for image prompts:
+If you go through the sample app's `LiteRTLMRuntime` wrapper, the Swift API takes care of the boilerplate:
+
+```swift
+let result = try await LiteRTLMRuntime().generateResponse(
+    modelURL: modelURL,
+    cacheDirectory: cacheDirectory,
+    inputs: InferenceInputs(prompt: "What is this?", imageData: pngData),
+    options: LiteRTLMRuntimeOptions()
+)
+```
+
+If you call the C API directly, the sample app's effective GPU profile for image prompts is:
 
 ```c
 LiteRtLmEngineSettings* settings = litert_lm_engine_settings_create(
     model_path,
     /*backend_str=*/"gpu",
-    /*vision_backend_str=*/"gpu",
+    /*vision_backend_str=*/"cpu",            // Gemma 4 default; see note below
     /*audio_backend_str=*/NULL);
 litert_lm_engine_settings_set_runtime_library_dir(settings, runtime_library_dir);
 litert_lm_engine_settings_set_cache_dir(settings, cache_dir);
@@ -104,39 +115,40 @@ litert_lm_engine_settings_set_max_num_images(settings, 1);
 litert_lm_engine_settings_set_main_activation_data_type(settings, 1);  // FLOAT16
 litert_lm_engine_settings_set_max_num_tokens(settings, 384);
 litert_lm_engine_settings_set_advanced_bool(
-    settings, kLiteRtLmAdvancedConvertWeightsOnGpu, false);  // E4B
+    settings, kLiteRtLmAdvancedConvertWeightsOnGpu, false);  // E4B only
 litert_lm_engine_settings_set_advanced_bool(
-    settings, kLiteRtLmAdvancedCacheCompiledShadersOnly, true);
-litert_lm_engine_settings_set_vision_gpu_bool(
     settings, kLiteRtLmAdvancedCacheCompiledShadersOnly, true);
 litert_lm_engine_settings_enable_benchmark(settings);
 ```
 
-If `vision_backend_str` is left `NULL`, the first image content part will crash inside the runtime (`vision_executor_` is null). If `max_num_images` is left at the default `0`, vision prefill fails with a `DYNAMIC_UPDATE_SLICE` shape mismatch.
+A few subtleties worth knowing:
 
-Use `"cpu"` for either backend only when you intentionally want a CPU diagnostic path. Avoid setting `prefill_chunk_size` for GPU vision prompts unless you have a specific reason; that override can conflict with the model's baked vision-prefill graph. The sample app caps GPU `max_num_tokens` at `384` because larger budgets can exceed the memory envelope of the current public E4B artifact. Although the engine can decode and resize images internally, the sample app pre-resizes picker output to a 1024-pixel longest edge before sending it. This matches Edge Gallery's image path and avoids bad vision results from very large phone photos.
+- If `vision_backend_str` is left `NULL`, the first image content part will crash inside the runtime (`vision_executor_` is null).
+- If `max_num_images` is left at the default `0`, vision prefill fails with a `DYNAMIC_UPDATE_SLICE` shape mismatch.
+- For Gemma 4 image prompts, prefer `vision_backend_str = "cpu"`. The Metal vision encoder currently runs in FP16 (the C wrapper's memory-saving default) and produces semantically wrong embeddings for Gemma 4 — the dog test photo is described as "a crowd of people" or "a person's face". Forcing FP32 vision GPU restores correctness but exceeds iOS cold-start memory limits when paired with the GPU main executor. The sample app's `LiteRTLMRuntimeOptions.visionBackend` defaults to `.cpu` for Gemma 4 to side-step both failure modes.
+- For E4B specifically, also set main `kLiteRtLmAdvancedConvertWeightsOnGpu = false` and the vision-GPU `cache_compiled_shaders_only = true` if you are running vision GPU. CPU-side weight conversion is slower during cold engine creation, but it lowers the pre-`send_message` process footprint enough to fit the tested memory budget on iPhone 16 Pro Max and iPhone 17 Pro Max.
+- Avoid setting `prefill_chunk_size` for GPU vision prompts unless you have a specific reason; that override can conflict with the model's baked vision-prefill graph.
 
-For all-GPU E4B prompts, the sample app also disables main-executor `kLiteRtLmAdvancedConvertWeightsOnGpu` and enables `kLiteRtLmAdvancedCacheCompiledShadersOnly` on both the main and vision GPU executors. CPU-side weight conversion is slower during cold engine creation, but it lowers the pre-`send_message` process footprint enough to keep the iPhone 17 Pro Max UI path under the tested memory budget. Explicit DEBUG overrides can still set these options for diagnostics.
-
-The sample app applies EXIF orientation, downsizes picker output to a 1024-pixel longest edge, and re-encodes it as JPEG before sending it to LiteRT-LM. Re-encoding is important for HEIC photos from iOS, because the underlying `stb_image` decoder does not support HEIC.
+The sample app applies EXIF orientation, downsizes picker output to a 1024-pixel longest edge, and re-encodes it as PNG before sending it to LiteRT-LM. Re-encoding is important for HEIC photos from iOS, because the underlying `stb_image` decoder does not support HEIC.
 
 ## Current Sample Runtime Defaults
 
-The sample app's `LiteRTLMRuntime` currently applies these defaults when no DEBUG override is provided:
+The sample app's `LiteRTLMRuntimeOptions()` ships with these defaults:
 
-- `backend_str`: `"gpu"`
-- `vision_backend_str`: `"gpu"` when image data is attached, `"none"` for text-only prompts
-- `audio_backend_str`: `NULL`
-- `max_num_images`: `1`
-- main activation data type: `1` (`FLOAT16`) for GPU main executor
-- max tokens: `384` for GPU main executor
-- E4B main GPU weight conversion: CPU-side conversion
-- main GPU cache mode: compiled shaders only
-- vision GPU cache mode: compiled shaders only
-- session max output tokens: `256`
-- benchmark collection: enabled
+- `backend`: `.gpu`
+- `visionBackend`: `nil` — runtime resolves to `.cpu` for Gemma 4 image prompts (E2B and E4B), otherwise mirrors `backend` when an image is attached, otherwise no vision executor
+- audio backend: not instantiated
+- `maxNumImages`: `1`
+- `mainActivationDataType`: `nil` — runtime resolves to `.float16` on GPU main
+- `maxNumTokens`: `nil` — runtime resolves to `384` on GPU main
+- `advanced.gpuConvertWeightsOnGpu`: `nil` — runtime resolves to `false` for E4B on GPU main
+- `advanced.gpuCacheCompiledShadersOnly`: `nil` — runtime resolves to `true` on GPU main
+- `visionGPU.cacheCompiledShadersOnly`: `nil` — runtime resolves to `true` when vision is GPU
+- `cpuKernelMode`: `nil` — runtime resolves to `.builtin` for E4B main-CPU + vision-GPU; otherwise upstream default
+- session max output tokens: `256` (currently hard-coded in `LiteRTLMRuntime`)
+- `benchmark`: `true`
 
-`LITERT_LM_*` environment variables still exist in the sample app as DEBUG-only diagnostics. They are not required for normal sample app launches.
+There are no environment-variable overrides. To change any setting per-call, mutate the corresponding field on `LiteRTLMRuntimeOptions` before passing it to `generateResponse`.
 
 The benchmark fields exposed in the sample UI and logs are:
 

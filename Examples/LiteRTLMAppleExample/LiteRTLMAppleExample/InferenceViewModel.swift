@@ -218,7 +218,8 @@ final class InferenceViewModel: ObservableObject {
                 let result = try await runtime.generateResponse(
                     modelURL: localModelURL,
                     cacheDirectory: modelStore.cacheDirectory,
-                    inputs: inputs
+                    inputs: inputs,
+                    options: LiteRTLMRuntimeOptions()
                 )
 
                 response = result.text

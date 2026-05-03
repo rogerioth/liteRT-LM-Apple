@@ -12,17 +12,16 @@ enum ImageDataNormalizer {
             case .decodeFailed:
                 return "Could not decode the selected image."
             case .encodeFailed:
-                return "Could not re-encode the selected image as JPEG."
+                return "Could not re-encode the selected image as PNG."
             }
         }
     }
 
     /// Apply image orientation, downscale large picker bytes, and re-encode as
-    /// JPEG so the LiteRT-LM stb_image-based decoder can ingest them.
-    static func makeJPEGData(
+    /// PNG so the LiteRT-LM stb_image-based decoder can ingest them.
+    static func makePNGData(
         from rawData: Data,
-        maxPixelDimension: Int = 1024,
-        compressionQuality: Double = 0.9
+        maxPixelDimension: Int = 1024
     ) throws -> Data {
         guard let source = CGImageSourceCreateWithData(rawData as CFData, nil) else {
             throw NormalizationError.decodeFailed
@@ -50,17 +49,14 @@ enum ImageDataNormalizer {
         let mutableData = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
             mutableData,
-            UTType.jpeg.identifier as CFString,
+            UTType.png.identifier as CFString,
             1,
             nil
         ) else {
             throw NormalizationError.encodeFailed
         }
 
-        let options: [CFString: Any] = [
-            kCGImageDestinationLossyCompressionQuality: compressionQuality,
-        ]
-        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+        CGImageDestinationAddImage(destination, cgImage, nil)
 
         guard CGImageDestinationFinalize(destination) else {
             throw NormalizationError.encodeFailed
@@ -74,7 +70,7 @@ enum ImageDataNormalizer {
             sourceDimensions = "unknown"
         }
         ConsoleLog.info(
-            "Normalized attached image raw_bytes=\(rawData.count) jpeg_bytes=\(normalizedData.count) source_dimensions=\(sourceDimensions) jpeg_dimensions=\(normalizedWidth)x\(normalizedHeight) max_pixel_dimension=\(maxPixelDimension) quality=\(compressionQuality).",
+            "Normalized attached image raw_bytes=\(rawData.count) png_bytes=\(normalizedData.count) source_dimensions=\(sourceDimensions) png_dimensions=\(normalizedWidth)x\(normalizedHeight) max_pixel_dimension=\(maxPixelDimension).",
             category: "ImageNormalizer"
         )
         return normalizedData
