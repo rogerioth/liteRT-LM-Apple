@@ -135,6 +135,20 @@ mkdir -p "${output}"
 printf '<plist />\n' > "${output}/Info.plist"
 STUB
 
+cat > "${fake_bin}/install_name_tool" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'install_name_tool %s\n' "$*" >> "${COMMAND_LOG}"
+STUB
+
+cat > "${fake_bin}/codesign" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'codesign %s\n' "$*" >> "${COMMAND_LOG}"
+STUB
+
 cat > "${fake_bin}/file" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -142,7 +156,7 @@ set -euo pipefail
 printf '%s: Mach-O 64-bit dynamically linked shared library arm64\n' "$1"
 STUB
 
-chmod +x "${fake_bin}/bazelisk" "${fake_bin}/xcrun" "${fake_bin}/xcodebuild" "${fake_bin}/file"
+chmod +x "${fake_bin}/bazelisk" "${fake_bin}/xcrun" "${fake_bin}/xcodebuild" "${fake_bin}/install_name_tool" "${fake_bin}/codesign" "${fake_bin}/file"
 
 export COMMAND_LOG="${command_log}"
 export UPSTREAM_DIR="${upstream_dir}"
@@ -172,4 +186,29 @@ if ! grep -q 'LiteRtMetalAccelerator.xcframework' "${command_log}"; then
   exit 1
 fi
 
-echo "PASS: build_xcframeworks.sh packages the GPU-capable engine target."
+if grep -q -- '-library ' "${command_log}"; then
+  echo "FAIL: expected XCFrameworks to be created from framework bundles, not standalone dylibs." >&2
+  cat "${command_log}" >&2
+  exit 1
+fi
+
+if ! grep -q -- '-framework .*LRE.framework' "${command_log}"; then
+  echo "FAIL: expected the engine to be packaged as a framework bundle." >&2
+  cat "${command_log}" >&2
+  exit 1
+fi
+
+if ! grep -q 'GMCP.framework/GMCP' "${command_log}"; then
+  echo "FAIL: expected the engine install name to reference the Gemma framework bundle." >&2
+  cat "${command_log}" >&2
+  exit 1
+fi
+
+framework_signs="$(grep -c '^codesign ' "${command_log}" || true)"
+if [[ "${framework_signs}" -ne 18 ]]; then
+  echo "FAIL: expected 18 framework signing passes, found ${framework_signs}." >&2
+  cat "${command_log}" >&2
+  exit 1
+fi
+
+echo "PASS: build_xcframeworks.sh packages the GPU-capable engine target as framework bundles."
