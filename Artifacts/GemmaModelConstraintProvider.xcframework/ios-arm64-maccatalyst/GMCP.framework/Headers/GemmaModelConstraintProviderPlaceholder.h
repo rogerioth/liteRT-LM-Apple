@@ -1,1 +1,0 @@
-/* Placeholder header to preserve the XCFramework Headers directory in Git. */

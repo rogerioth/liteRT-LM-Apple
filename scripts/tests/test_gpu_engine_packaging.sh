@@ -114,14 +114,53 @@ set -euo pipefail
 printf 'xcodebuild %s\n' "$*" >> "${COMMAND_LOG}"
 
 output=""
+frameworks=()
 while (($#)); do
   case "$1" in
+    -framework)
+      frameworks+=("$2")
+      shift 2
+      ;;
     -output)
       output="$2"
       shift 2
       ;;
     *)
       shift
+      ;;
+  esac
+done
+
+for framework in "${frameworks[@]}"; do
+  framework_name="$(basename "${framework}" .framework)"
+  case "${framework}" in
+    *maccatalyst-framework*|*macos-arm64-framework*)
+      if [[ -e "${framework}/Info.plist" ]]; then
+        echo "Expected versioned ${framework_name}.framework to omit root Info.plist: ${framework}" >&2
+        exit 1
+      fi
+      if [[ ! -f "${framework}/Versions/Current/Resources/Info.plist" ]]; then
+        echo "Expected versioned ${framework_name}.framework Info.plist under Versions/Current/Resources: ${framework}" >&2
+        exit 1
+      fi
+      if [[ ! -L "${framework}/${framework_name}" ]]; then
+        echo "Expected versioned ${framework_name}.framework root executable symlink: ${framework}" >&2
+        exit 1
+      fi
+      if [[ ! -L "${framework}/Headers" || ! -L "${framework}/Modules" || ! -L "${framework}/Resources" ]]; then
+        echo "Expected versioned ${framework_name}.framework root Headers/Modules/Resources symlinks: ${framework}" >&2
+        exit 1
+      fi
+      ;;
+    *)
+      if [[ ! -f "${framework}/Info.plist" ]]; then
+        echo "Expected shallow ${framework_name}.framework root Info.plist: ${framework}" >&2
+        exit 1
+      fi
+      if [[ -e "${framework}/Versions" ]]; then
+        echo "Expected shallow ${framework_name}.framework to omit Versions directory: ${framework}" >&2
+        exit 1
+      fi
       ;;
   esac
 done
