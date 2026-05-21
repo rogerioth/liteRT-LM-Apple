@@ -83,11 +83,12 @@ framework_install_name() {
 }
 
 write_framework_info_plist() {
-  local framework_dir="$1"
+  local info_plist_path="$1"
   local framework_name="$2"
   local executable_name="$3"
 
-  cat > "${framework_dir}/Info.plist" <<PLIST
+  mkdir -p "$(dirname "${info_plist_path}")"
+  cat > "${info_plist_path}" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -119,26 +120,54 @@ wrap_framework() {
   local input_binary="$3"
   local headers_dir="$4"
   local output_root="$5"
+  local layout="${6:-shallow}"
   local module_name
   local framework_dir="${output_root}/${framework_name}.framework"
 
   module_name="$(printf '%s' "${framework_name}" | tr -cd '[:alnum:]_')"
 
   rm -rf "${framework_dir}"
-  mkdir -p \
-    "${framework_dir}/Headers" \
-    "${framework_dir}/Modules"
+  if [[ "${layout}" == "versioned" ]]; then
+    mkdir -p \
+      "${framework_dir}/Versions/A/Headers" \
+      "${framework_dir}/Versions/A/Modules" \
+      "${framework_dir}/Versions/A/Resources"
 
-  install -m 0755 "${input_binary}" "${framework_dir}/${executable_name}"
-  install -m 0644 "${headers_dir}"/* "${framework_dir}/Headers/"
-  write_framework_info_plist "${framework_dir}" "${framework_name}" "${executable_name}"
-  cat > "${framework_dir}/Modules/module.modulemap" <<MODULEMAP
+    install -m 0755 "${input_binary}" "${framework_dir}/Versions/A/${executable_name}"
+    install -m 0644 "${headers_dir}"/* "${framework_dir}/Versions/A/Headers/"
+    write_framework_info_plist "${framework_dir}/Versions/A/Resources/Info.plist" "${framework_name}" "${executable_name}"
+    cat > "${framework_dir}/Versions/A/Modules/module.modulemap" <<MODULEMAP
 framework module ${module_name} {
   umbrella "Headers"
   export *
   module * { export * }
 }
 MODULEMAP
+
+    ln -s A "${framework_dir}/Versions/Current"
+    ln -s "Versions/Current/${executable_name}" "${framework_dir}/${executable_name}"
+    ln -s "Versions/Current/Headers" "${framework_dir}/Headers"
+    ln -s "Versions/Current/Modules" "${framework_dir}/Modules"
+    ln -s "Versions/Current/Resources" "${framework_dir}/Resources"
+  elif [[ "${layout}" == "shallow" ]]; then
+    mkdir -p \
+      "${framework_dir}/Headers" \
+      "${framework_dir}/Modules"
+
+    install -m 0755 "${input_binary}" "${framework_dir}/${executable_name}"
+    install -m 0644 "${headers_dir}"/* "${framework_dir}/Headers/"
+    write_framework_info_plist "${framework_dir}/Info.plist" "${framework_name}" "${executable_name}"
+    cat > "${framework_dir}/Modules/module.modulemap" <<MODULEMAP
+framework module ${module_name} {
+  umbrella "Headers"
+  export *
+  module * { export * }
+}
+MODULEMAP
+  else
+    echo "Unknown framework layout '${layout}' for ${framework_name}" >&2
+    exit 1
+  fi
 
   install_name_tool \
     -id "$(framework_install_name "${framework_name}" "${executable_name}")" \
@@ -260,22 +289,22 @@ metal_executable_name="LMA"
 
 engine_device_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${device_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework")"
 engine_sim_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${sim_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework")"
-engine_catalyst_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${catalyst_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework")"
-engine_mac_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${mac_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework")"
+engine_catalyst_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${catalyst_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework" versioned)"
+engine_mac_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${mac_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned)"
 engine_vision_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${vision_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework")"
 engine_vision_sim_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${vision_sim_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework")"
 
 constraint_device_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${device_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework")"
 constraint_sim_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${sim_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework")"
-constraint_catalyst_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${catalyst_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework")"
-constraint_mac_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${mac_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework")"
+constraint_catalyst_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${catalyst_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework" versioned)"
+constraint_mac_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${mac_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned)"
 constraint_vision_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${vision_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework")"
 constraint_vision_sim_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${vision_sim_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework")"
 
 metal_device_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${device_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework")"
 metal_sim_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${sim_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework")"
-metal_catalyst_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${catalyst_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework")"
-metal_mac_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${mac_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework")"
+metal_catalyst_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${catalyst_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework" versioned)"
+metal_mac_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${mac_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned)"
 metal_vision_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${vision_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework")"
 metal_vision_sim_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${vision_sim_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework")"
 

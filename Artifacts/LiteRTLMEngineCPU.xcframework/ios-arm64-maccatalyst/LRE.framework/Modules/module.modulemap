@@ -1,5 +1,0 @@
-framework module LRE {
-  umbrella "Headers"
-  export *
-  module * { export * }
-}
