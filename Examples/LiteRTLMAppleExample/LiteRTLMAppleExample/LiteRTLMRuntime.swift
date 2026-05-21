@@ -87,6 +87,9 @@ extension LiteRTLMRuntimeProtocol {
 }
 
 struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
+    private static let cpuKernelModeEnvironmentKey = "LITERT_LM_CPU_KERNEL_MODE"
+    private static let defaultCPUKernelModeName = "builtin"
+
     func generateResponse(
         modelURL: URL,
         cacheDirectory: URL,
@@ -561,8 +564,30 @@ struct LiteRTLMRuntime: LiteRTLMRuntimeProtocol {
         if let explicit = options.cpuKernelMode {
             return explicit
         }
+        if let overrideName = ProcessInfo.processInfo.environment[cpuKernelModeEnvironmentKey] {
+            if let override = cpuKernelMode(named: overrideName) {
+                return override
+            }
+            ConsoleLog.error(
+                "Ignoring invalid \(cpuKernelModeEnvironmentKey)=\(overrideName).",
+                category: "Runtime"
+            )
+        }
         guard backend == .cpu, visionBackend == .gpu, isE4B(modelURL: modelURL) else { return nil }
-        return .builtin
+        return cpuKernelMode(named: defaultCPUKernelModeName)
+    }
+
+    private static func cpuKernelMode(named name: String) -> LiteRTLMCPUKernelMode? {
+        switch name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "xnnpack":
+            return .xnnpack
+        case "reference":
+            return .reference
+        case "builtin":
+            return .builtin
+        default:
+            return nil
+        }
     }
 
     private static func isE4B(modelURL: URL) -> Bool {

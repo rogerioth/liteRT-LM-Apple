@@ -1,0 +1,5 @@
+framework module GMCP {
+  umbrella "Headers"
+  export *
+  module * { export * }
+}
