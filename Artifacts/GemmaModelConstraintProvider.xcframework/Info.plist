@@ -6,36 +6,6 @@
 	<array>
 		<dict>
 			<key>BinaryPath</key>
-			<string>GMCP.framework/GMCP</string>
-			<key>LibraryIdentifier</key>
-			<string>xros-arm64</string>
-			<key>LibraryPath</key>
-			<string>GMCP.framework</string>
-			<key>SupportedArchitectures</key>
-			<array>
-				<string>arm64</string>
-			</array>
-			<key>SupportedPlatform</key>
-			<string>xros</string>
-		</dict>
-		<dict>
-			<key>BinaryPath</key>
-			<string>GMCP.framework/GMCP</string>
-			<key>LibraryIdentifier</key>
-			<string>xros-arm64-simulator</string>
-			<key>LibraryPath</key>
-			<string>GMCP.framework</string>
-			<key>SupportedArchitectures</key>
-			<array>
-				<string>arm64</string>
-			</array>
-			<key>SupportedPlatform</key>
-			<string>xros</string>
-			<key>SupportedPlatformVariant</key>
-			<string>simulator</string>
-		</dict>
-		<dict>
-			<key>BinaryPath</key>
 			<string>GMCP.framework/Versions/A/GMCP</string>
 			<key>LibraryIdentifier</key>
 			<string>macos-arm64</string>
@@ -93,6 +63,36 @@
 			<string>ios</string>
 			<key>SupportedPlatformVariant</key>
 			<string>simulator</string>
+		</dict>
+		<dict>
+			<key>BinaryPath</key>
+			<string>GMCP.framework/GMCP</string>
+			<key>LibraryIdentifier</key>
+			<string>xros-arm64-simulator</string>
+			<key>LibraryPath</key>
+			<string>GMCP.framework</string>
+			<key>SupportedArchitectures</key>
+			<array>
+				<string>arm64</string>
+			</array>
+			<key>SupportedPlatform</key>
+			<string>xros</string>
+			<key>SupportedPlatformVariant</key>
+			<string>simulator</string>
+		</dict>
+		<dict>
+			<key>BinaryPath</key>
+			<string>GMCP.framework/GMCP</string>
+			<key>LibraryIdentifier</key>
+			<string>xros-arm64</string>
+			<key>LibraryPath</key>
+			<string>GMCP.framework</string>
+			<key>SupportedArchitectures</key>
+			<array>
+				<string>arm64</string>
+			</array>
+			<key>SupportedPlatform</key>
+			<string>xros</string>
 		</dict>
 	</array>
 	<key>CFBundlePackageType</key>

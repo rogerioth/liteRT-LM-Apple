@@ -7,6 +7,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 upstream_dir="${UPSTREAM_CLONE_DIR_DEFAULT}"
 artifacts_dir="${ARTIFACTS_DIR_DEFAULT}"
 public_headers_dir="${PUBLIC_HEADERS_DIR_DEFAULT}"
+ios_minimum_os_version="15.0"
+catalyst_minimum_os_version="15.0"
+catalyst_minimum_system_version="10.15"
 tmp_dir="$(mktemp -d)"
 
 cleanup() {
@@ -86,6 +89,9 @@ write_framework_info_plist() {
   local info_plist_path="$1"
   local framework_name="$2"
   local executable_name="$3"
+  local supported_platform="$4"
+  local minimum_version_key="$5"
+  local minimum_version="$6"
 
   mkdir -p "$(dirname "${info_plist_path}")"
   cat > "${info_plist_path}" <<PLIST
@@ -105,10 +111,16 @@ write_framework_info_plist() {
 	<string>${framework_name}</string>
 	<key>CFBundlePackageType</key>
 	<string>FMWK</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>${supported_platform}</string>
+	</array>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>${minimum_version_key}</key>
+	<string>${minimum_version}</string>
 </dict>
 </plist>
 PLIST
@@ -121,6 +133,9 @@ wrap_framework() {
   local headers_dir="$4"
   local output_root="$5"
   local layout="${6:-shallow}"
+  local supported_platform="${7:?missing supported platform for ${framework_name}}"
+  local minimum_version_key="${8:?missing minimum version key for ${framework_name}}"
+  local minimum_version="${9:?missing minimum version for ${framework_name}}"
   local module_name
   local framework_dir="${output_root}/${framework_name}.framework"
 
@@ -135,7 +150,13 @@ wrap_framework() {
 
     install -m 0755 "${input_binary}" "${framework_dir}/Versions/A/${executable_name}"
     install -m 0644 "${headers_dir}"/* "${framework_dir}/Versions/A/Headers/"
-    write_framework_info_plist "${framework_dir}/Versions/A/Resources/Info.plist" "${framework_name}" "${executable_name}"
+    write_framework_info_plist \
+      "${framework_dir}/Versions/A/Resources/Info.plist" \
+      "${framework_name}" \
+      "${executable_name}" \
+      "${supported_platform}" \
+      "${minimum_version_key}" \
+      "${minimum_version}"
     cat > "${framework_dir}/Versions/A/Modules/module.modulemap" <<MODULEMAP
 framework module ${module_name} {
   umbrella "Headers"
@@ -156,7 +177,13 @@ MODULEMAP
 
     install -m 0755 "${input_binary}" "${framework_dir}/${executable_name}"
     install -m 0644 "${headers_dir}"/* "${framework_dir}/Headers/"
-    write_framework_info_plist "${framework_dir}/Info.plist" "${framework_name}" "${executable_name}"
+    write_framework_info_plist \
+      "${framework_dir}/Info.plist" \
+      "${framework_name}" \
+      "${executable_name}" \
+      "${supported_platform}" \
+      "${minimum_version_key}" \
+      "${minimum_version}"
     cat > "${framework_dir}/Modules/module.modulemap" <<MODULEMAP
 framework module ${module_name} {
   umbrella "Headers"
@@ -262,9 +289,9 @@ install -m 0755 "${mac_engine_input}" "${mac_engine_staged}"
 # device and simulator slices from the existing iOS outputs.
 retag_build_version visionos "${device_engine_input}" "${vision_engine_staged}" "1.0"
 retag_build_version visionossim "${sim_engine_input}" "${vision_sim_engine_staged}" "1.0"
-install -m 0755 "${device_constraint_input}" "${device_constraint_staged}"
-install -m 0755 "${sim_constraint_input}" "${sim_constraint_staged}"
-retag_build_version maccatalyst "${sim_constraint_input}" "${catalyst_constraint_staged}"
+retag_build_version ios "${device_constraint_input}" "${device_constraint_staged}" "${ios_minimum_os_version}"
+retag_build_version iossim "${sim_constraint_input}" "${sim_constraint_staged}" "${ios_minimum_os_version}"
+retag_build_version maccatalyst "${sim_constraint_input}" "${catalyst_constraint_staged}" "${catalyst_minimum_os_version}"
 install -m 0755 "${mac_constraint_input}" "${mac_constraint_staged}"
 retag_build_version visionos "${device_constraint_input}" "${vision_constraint_staged}" "1.0"
 retag_build_version visionossim "${sim_constraint_input}" "${vision_sim_constraint_staged}" "1.0"
@@ -287,26 +314,26 @@ constraint_executable_name="GMCP"
 metal_framework_name="LMA"
 metal_executable_name="LMA"
 
-engine_device_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${device_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework")"
-engine_sim_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${sim_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework")"
-engine_catalyst_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${catalyst_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework" versioned)"
-engine_mac_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${mac_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned)"
-engine_vision_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${vision_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework")"
-engine_vision_sim_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${vision_sim_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework")"
+engine_device_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${device_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework" shallow iPhoneOS MinimumOSVersion "$(extract_build_setting "${device_engine_staged}" minos)")"
+engine_sim_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${sim_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework" shallow iPhoneSimulator MinimumOSVersion "$(extract_build_setting "${sim_engine_staged}" minos)")"
+engine_catalyst_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${catalyst_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework" versioned MacOSX LSMinimumSystemVersion "${catalyst_minimum_system_version}")"
+engine_mac_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${mac_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned MacOSX LSMinimumSystemVersion "$(extract_build_setting "${mac_engine_staged}" minos)")"
+engine_vision_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${vision_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework" shallow XROS MinimumOSVersion "$(extract_build_setting "${vision_engine_staged}" minos)")"
+engine_vision_sim_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${vision_sim_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework" shallow XRSimulator MinimumOSVersion "$(extract_build_setting "${vision_sim_engine_staged}" minos)")"
 
-constraint_device_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${device_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework")"
-constraint_sim_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${sim_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework")"
-constraint_catalyst_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${catalyst_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework" versioned)"
-constraint_mac_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${mac_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned)"
-constraint_vision_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${vision_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework")"
-constraint_vision_sim_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${vision_sim_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework")"
+constraint_device_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${device_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework" shallow iPhoneOS MinimumOSVersion "$(extract_build_setting "${device_constraint_staged}" minos)")"
+constraint_sim_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${sim_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework" shallow iPhoneSimulator MinimumOSVersion "$(extract_build_setting "${sim_constraint_staged}" minos)")"
+constraint_catalyst_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${catalyst_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework" versioned MacOSX LSMinimumSystemVersion "${catalyst_minimum_system_version}")"
+constraint_mac_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${mac_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned MacOSX LSMinimumSystemVersion "$(extract_build_setting "${mac_constraint_staged}" minos)")"
+constraint_vision_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${vision_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework" shallow XROS MinimumOSVersion "$(extract_build_setting "${vision_constraint_staged}" minos)")"
+constraint_vision_sim_framework="$(wrap_framework "${constraint_framework_name}" "${constraint_executable_name}" "${vision_sim_constraint_staged}" "${constraint_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework" shallow XRSimulator MinimumOSVersion "$(extract_build_setting "${vision_sim_constraint_staged}" minos)")"
 
-metal_device_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${device_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework")"
-metal_sim_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${sim_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework")"
-metal_catalyst_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${catalyst_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework" versioned)"
-metal_mac_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${mac_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned)"
-metal_vision_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${vision_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework")"
-metal_vision_sim_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${vision_sim_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework")"
+metal_device_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${device_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework" shallow iPhoneOS MinimumOSVersion "$(extract_build_setting "${device_metal_accelerator_staged}" minos)")"
+metal_sim_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${sim_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework" shallow iPhoneSimulator MinimumOSVersion "$(extract_build_setting "${sim_metal_accelerator_staged}" minos)")"
+metal_catalyst_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${catalyst_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework" versioned MacOSX LSMinimumSystemVersion "${catalyst_minimum_system_version}")"
+metal_mac_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${mac_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned MacOSX LSMinimumSystemVersion "$(extract_build_setting "${mac_metal_accelerator_staged}" minos)")"
+metal_vision_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${vision_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework" shallow XROS MinimumOSVersion "$(extract_build_setting "${vision_metal_accelerator_staged}" minos)")"
+metal_vision_sim_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${vision_sim_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework" shallow XRSimulator MinimumOSVersion "$(extract_build_setting "${vision_sim_metal_accelerator_staged}" minos)")"
 
 for engine_framework in \
   "${engine_device_framework}" \

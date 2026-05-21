@@ -139,8 +139,17 @@ for framework in "${frameworks[@]}"; do
         echo "Expected versioned ${framework_name}.framework to omit root Info.plist: ${framework}" >&2
         exit 1
       fi
-      if [[ ! -f "${framework}/Versions/Current/Resources/Info.plist" ]]; then
+      info_plist="${framework}/Versions/Current/Resources/Info.plist"
+      if [[ ! -f "${info_plist}" ]]; then
         echo "Expected versioned ${framework_name}.framework Info.plist under Versions/Current/Resources: ${framework}" >&2
+        exit 1
+      fi
+      if ! grep -q '<key>LSMinimumSystemVersion</key>' "${info_plist}"; then
+        echo "Expected versioned ${framework_name}.framework Info.plist to declare LSMinimumSystemVersion: ${framework}" >&2
+        exit 1
+      fi
+      if ! grep -q '<string>MacOSX</string>' "${info_plist}"; then
+        echo "Expected versioned ${framework_name}.framework Info.plist to declare MacOSX support: ${framework}" >&2
         exit 1
       fi
       if [[ ! -L "${framework}/${framework_name}" ]]; then
@@ -155,6 +164,10 @@ for framework in "${frameworks[@]}"; do
     *)
       if [[ ! -f "${framework}/Info.plist" ]]; then
         echo "Expected shallow ${framework_name}.framework root Info.plist: ${framework}" >&2
+        exit 1
+      fi
+      if ! grep -q '<key>MinimumOSVersion</key>' "${framework}/Info.plist"; then
+        echo "Expected shallow ${framework_name}.framework Info.plist to declare MinimumOSVersion: ${framework}" >&2
         exit 1
       fi
       if [[ -e "${framework}/Versions" ]]; then
