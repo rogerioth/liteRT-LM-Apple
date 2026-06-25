@@ -36,7 +36,10 @@
 #     sim, and macOS dylibs with bazelisk, then derives Catalyst and visionOS
 #     slices via xcrun vtool. Catches upstream-pin breakage and
 #     export-patch drift.
-#   - Step 2: native-macOS xcodebuild on the sample app against the freshly
+#   - Step 2: GPU packaging regression scripts. These cover build-script
+#     packaging behavior, patch drift, and checked-in sampler/engine ABI
+#     compatibility for the iOS artifacts.
+#   - Step 3: native-macOS xcodebuild on the sample app against the freshly
 #     built XCFrameworks. Catches sample-side regressions for any code that
 #     also runs in the macOS-only path (most of it).
 #
@@ -172,6 +175,13 @@ jobs:
             ./scripts/buildall.sh
           no_output_timeout: 60m
 
+      - run:
+          name: Run GPU packaging regression tests
+          command: |
+            bash scripts/tests/test_gpu_engine_packaging.sh
+            bash scripts/tests/test_gpu_runtime_patch.sh
+            bash scripts/tests/test_gpu_sampler_artifacts.sh
+
       - save_cache:
           key: litertlm-bazel-cache-v1-{{ checksum "scripts/subscripts/common.sh" }}-{{ checksum "patches/0001-export-ios-shared-engine-dylib.patch" }}
           paths:
@@ -183,7 +193,11 @@ jobs:
           name: Verify XCFramework slice manifest
           command: |
             set -eu
-            for fw in Artifacts/LiteRTLMEngineCPU.xcframework Artifacts/GemmaModelConstraintProvider.xcframework; do
+            for fw in \
+              Artifacts/LiteRTLMEngineCPU.xcframework \
+              Artifacts/GemmaModelConstraintProvider.xcframework \
+              Artifacts/LiteRtMetalAccelerator.xcframework \
+              Artifacts/LiteRtTopKMetalSampler.xcframework; do
               echo "==> ${fw}"
               ls "${fw}"
               for slice in ios-arm64 ios-arm64-simulator ios-arm64-maccatalyst macos-arm64 xros-arm64 xros-arm64-simulator; do

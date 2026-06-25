@@ -16,7 +16,7 @@ That top-level script is the public entrypoint. It delegates to the helper scrip
 
 1. Clones the pinned upstream LiteRT-LM repository into `.worktree/LiteRT-LM`.
 2. Checks out the configured upstream revision.
-3. Fetches Git LFS-backed prebuilt dependencies required by upstream.
+3. Fetches Git LFS-backed prebuilt dependencies required by upstream, including the official TopK Metal sampler overlay.
 4. Applies the local export patch.
 5. Builds iOS device, iOS simulator, and macOS dylibs with `bazelisk`.
 6. Derives an Apple Silicon Mac Catalyst slice from the iOS simulator dylib.
@@ -49,6 +49,7 @@ If the sample project is temporarily following a feature branch through remote S
 
 - `Artifacts/LiteRTLMEngineCPU.xcframework`
 - `Artifacts/LiteRtMetalAccelerator.xcframework`
+- `Artifacts/LiteRtTopKMetalSampler.xcframework`
 - `Artifacts/GemmaModelConstraintProvider.xcframework`
 - `Sources/LiteRTLMApple/include/engine.h`
 - `README.md` when user-facing setup or compatibility notes change

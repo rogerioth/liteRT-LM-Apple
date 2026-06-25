@@ -243,6 +243,7 @@ Updated outputs land in:
 
 - `Artifacts/LiteRTLMEngineCPU.xcframework`
 - `Artifacts/LiteRtMetalAccelerator.xcframework`
+- `Artifacts/LiteRtTopKMetalSampler.xcframework`
 - `Artifacts/GemmaModelConstraintProvider.xcframework`
 - `Sources/LiteRTLMApple/include/engine.h`
 
