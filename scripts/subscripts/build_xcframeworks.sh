@@ -46,6 +46,7 @@ require_cmd install
 require_cmd install_name_tool
 require_cmd codesign
 require_cmd file
+require_cmd nm
 
 mkdir -p "${artifacts_dir}" "${public_headers_dir}"
 
@@ -209,6 +210,16 @@ sign_framework() {
   codesign --force --sign - --timestamp=none "${framework_dir}" >/dev/null
 }
 
+validate_topk_metal_sampler() {
+  local dylib="$1"
+
+  if ! nm -gU "${dylib}" | grep -q '_LiteRtTopKMetalSampler_UpdateConfig'; then
+    echo "Expected TopK Metal sampler to export LiteRtTopKMetalSampler_UpdateConfig: ${dylib}" >&2
+    echo "Use an upstream prebuilt TopK Metal sampler from Google LiteRT-LM commit 74dae502 or newer." >&2
+    exit 1
+  fi
+}
+
 pushd "${upstream_dir}" >/dev/null
 bazelisk build --config=ios_arm64 //c:engine_shared
 bazelisk build --config=ios_sim_arm64 //c:engine_shared
@@ -224,6 +235,8 @@ mac_constraint_input="${upstream_dir}/prebuilt/macos_arm64/libGemmaModelConstrai
 device_metal_accelerator_input="${upstream_dir}/prebuilt/ios_arm64/libLiteRtMetalAccelerator.dylib"
 sim_metal_accelerator_input="${upstream_dir}/prebuilt/ios_sim_arm64/libLiteRtMetalAccelerator.dylib"
 mac_metal_accelerator_input="${upstream_dir}/prebuilt/macos_arm64/libLiteRtMetalAccelerator.dylib"
+device_topk_metal_sampler_input="${upstream_dir}/prebuilt/ios_arm64/libLiteRtTopKMetalSampler.dylib"
+mac_topk_metal_sampler_input="${upstream_dir}/prebuilt/macos_arm64/libLiteRtTopKMetalSampler.dylib"
 
 device_engine_staged="${tmp_dir}/ios-arm64/libLiteRTLMEngineCPU.dylib"
 sim_engine_staged="${tmp_dir}/ios-arm64-simulator/libLiteRTLMEngineCPU.dylib"
@@ -243,10 +256,17 @@ catalyst_metal_accelerator_staged="${tmp_dir}/ios-arm64-maccatalyst/libLiteRtMet
 mac_metal_accelerator_staged="${tmp_dir}/macos-arm64/libLiteRtMetalAccelerator.dylib"
 vision_metal_accelerator_staged="${tmp_dir}/xros-arm64/libLiteRtMetalAccelerator.dylib"
 vision_sim_metal_accelerator_staged="${tmp_dir}/xros-arm64-simulator/libLiteRtMetalAccelerator.dylib"
+device_topk_metal_sampler_staged="${tmp_dir}/ios-arm64/libLiteRtTopKMetalSampler.dylib"
+sim_topk_metal_sampler_staged="${tmp_dir}/ios-arm64-simulator/libLiteRtTopKMetalSampler.dylib"
+catalyst_topk_metal_sampler_staged="${tmp_dir}/ios-arm64-maccatalyst/libLiteRtTopKMetalSampler.dylib"
+mac_topk_metal_sampler_staged="${tmp_dir}/macos-arm64/libLiteRtTopKMetalSampler.dylib"
+vision_topk_metal_sampler_staged="${tmp_dir}/xros-arm64/libLiteRtTopKMetalSampler.dylib"
+vision_sim_topk_metal_sampler_staged="${tmp_dir}/xros-arm64-simulator/libLiteRtTopKMetalSampler.dylib"
 headers_staged="${tmp_dir}/Headers"
 engine_placeholder_headers_staged="${tmp_dir}/EnginePlaceholderHeaders"
 constraint_placeholder_headers_staged="${tmp_dir}/ConstraintPlaceholderHeaders"
 metal_accelerator_placeholder_headers_staged="${tmp_dir}/MetalAcceleratorPlaceholderHeaders"
+topk_metal_sampler_placeholder_headers_staged="${tmp_dir}/TopKMetalSamplerPlaceholderHeaders"
 
 mkdir -p \
   "$(dirname "${device_engine_staged}")" \
@@ -258,7 +278,8 @@ mkdir -p \
   "${headers_staged}" \
   "${engine_placeholder_headers_staged}" \
   "${constraint_placeholder_headers_staged}" \
-  "${metal_accelerator_placeholder_headers_staged}"
+  "${metal_accelerator_placeholder_headers_staged}" \
+  "${topk_metal_sampler_placeholder_headers_staged}"
 
 for dylib in \
   "${device_constraint_input}" \
@@ -266,7 +287,9 @@ for dylib in \
   "${mac_constraint_input}" \
   "${device_metal_accelerator_input}" \
   "${sim_metal_accelerator_input}" \
-  "${mac_metal_accelerator_input}"; do
+  "${mac_metal_accelerator_input}" \
+  "${device_topk_metal_sampler_input}" \
+  "${mac_topk_metal_sampler_input}"; do
   if ! file "${dylib}" | grep -q "Mach-O"; then
     echo "Expected a Mach-O dylib but found something else: ${dylib}" >&2
     echo "Run ./scripts/buildall.sh again and ensure git-lfs materializes the prebuilt binaries." >&2
@@ -274,11 +297,15 @@ for dylib in \
   fi
 done
 
+validate_topk_metal_sampler "${device_topk_metal_sampler_input}"
+validate_topk_metal_sampler "${mac_topk_metal_sampler_input}"
+
 install -m 0644 "${upstream_dir}/c/engine.h" "${public_headers_dir}/engine.h"
 install -m 0644 "${upstream_dir}/c/engine.h" "${headers_staged}/engine.h"
 printf '/* Placeholder header to preserve the XCFramework Headers directory in Git. */\n' > "${engine_placeholder_headers_staged}/LiteRTLMEngineCPUPlaceholder.h"
 printf '/* Placeholder header to preserve the XCFramework Headers directory in Git. */\n' > "${constraint_placeholder_headers_staged}/GemmaModelConstraintProviderPlaceholder.h"
 printf '/* Placeholder header to preserve the XCFramework Headers directory in Git. */\n' > "${metal_accelerator_placeholder_headers_staged}/LiteRtMetalAcceleratorPlaceholder.h"
+printf '/* Placeholder header to preserve the XCFramework Headers directory in Git. */\n' > "${topk_metal_sampler_placeholder_headers_staged}/LiteRtTopKMetalSamplerPlaceholder.h"
 install -m 0755 "${device_engine_input}" "${device_engine_staged}"
 install -m 0755 "${sim_engine_input}" "${sim_engine_staged}"
 # Upstream does not publish dedicated Mac Catalyst dylibs, so derive a
@@ -301,11 +328,21 @@ retag_build_version maccatalyst "${sim_metal_accelerator_input}" "${catalyst_met
 install -m 0755 "${mac_metal_accelerator_input}" "${mac_metal_accelerator_staged}"
 retag_build_version visionos "${device_metal_accelerator_input}" "${vision_metal_accelerator_staged}" "1.0"
 retag_build_version visionossim "${sim_metal_accelerator_input}" "${vision_sim_metal_accelerator_staged}" "1.0"
+install -m 0755 "${device_topk_metal_sampler_input}" "${device_topk_metal_sampler_staged}"
+# Upstream currently publishes the TopK Metal sampler for iOS device and macOS.
+# Retag the iOS arm64 binary for the adjacent Apple destinations so the Swift
+# package remains buildable on simulator, Catalyst, and visionOS.
+retag_build_version iossim "${device_topk_metal_sampler_input}" "${sim_topk_metal_sampler_staged}" "${ios_minimum_os_version}"
+retag_build_version maccatalyst "${device_topk_metal_sampler_input}" "${catalyst_topk_metal_sampler_staged}" "${catalyst_minimum_os_version}"
+install -m 0755 "${mac_topk_metal_sampler_input}" "${mac_topk_metal_sampler_staged}"
+retag_build_version visionos "${device_topk_metal_sampler_input}" "${vision_topk_metal_sampler_staged}" "1.0"
+retag_build_version visionossim "${device_topk_metal_sampler_input}" "${vision_sim_topk_metal_sampler_staged}" "1.0"
 
 rm -rf \
   "${artifacts_dir}/LiteRTLMEngineCPU.xcframework" \
   "${artifacts_dir}/GemmaModelConstraintProvider.xcframework" \
-  "${artifacts_dir}/LiteRtMetalAccelerator.xcframework"
+  "${artifacts_dir}/LiteRtMetalAccelerator.xcframework" \
+  "${artifacts_dir}/LiteRtTopKMetalSampler.xcframework"
 
 engine_framework_name="LRE"
 engine_executable_name="LRE"
@@ -313,6 +350,8 @@ constraint_framework_name="GMCP"
 constraint_executable_name="GMCP"
 metal_framework_name="LMA"
 metal_executable_name="LMA"
+topk_metal_sampler_framework_name="LTMTS"
+topk_metal_sampler_executable_name="LTMTS"
 
 engine_device_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${device_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework" shallow iPhoneOS MinimumOSVersion "$(extract_build_setting "${device_engine_staged}" minos)")"
 engine_sim_framework="$(wrap_framework "${engine_framework_name}" "${engine_executable_name}" "${sim_engine_staged}" "${engine_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework" shallow iPhoneSimulator MinimumOSVersion "$(extract_build_setting "${sim_engine_staged}" minos)")"
@@ -334,6 +373,13 @@ metal_catalyst_framework="$(wrap_framework "${metal_framework_name}" "${metal_ex
 metal_mac_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${mac_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned MacOSX LSMinimumSystemVersion "$(extract_build_setting "${mac_metal_accelerator_staged}" minos)")"
 metal_vision_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${vision_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework" shallow XROS MinimumOSVersion "$(extract_build_setting "${vision_metal_accelerator_staged}" minos)")"
 metal_vision_sim_framework="$(wrap_framework "${metal_framework_name}" "${metal_executable_name}" "${vision_sim_metal_accelerator_staged}" "${metal_accelerator_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework" shallow XRSimulator MinimumOSVersion "$(extract_build_setting "${vision_sim_metal_accelerator_staged}" minos)")"
+
+topk_metal_sampler_device_framework="$(wrap_framework "${topk_metal_sampler_framework_name}" "${topk_metal_sampler_executable_name}" "${device_topk_metal_sampler_staged}" "${topk_metal_sampler_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-framework" shallow iPhoneOS MinimumOSVersion "$(extract_build_setting "${device_topk_metal_sampler_staged}" minos)")"
+topk_metal_sampler_sim_framework="$(wrap_framework "${topk_metal_sampler_framework_name}" "${topk_metal_sampler_executable_name}" "${sim_topk_metal_sampler_staged}" "${topk_metal_sampler_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-simulator-framework" shallow iPhoneSimulator MinimumOSVersion "$(extract_build_setting "${sim_topk_metal_sampler_staged}" minos)")"
+topk_metal_sampler_catalyst_framework="$(wrap_framework "${topk_metal_sampler_framework_name}" "${topk_metal_sampler_executable_name}" "${catalyst_topk_metal_sampler_staged}" "${topk_metal_sampler_placeholder_headers_staged}" "${tmp_dir}/ios-arm64-maccatalyst-framework" versioned MacOSX LSMinimumSystemVersion "${catalyst_minimum_system_version}")"
+topk_metal_sampler_mac_framework="$(wrap_framework "${topk_metal_sampler_framework_name}" "${topk_metal_sampler_executable_name}" "${mac_topk_metal_sampler_staged}" "${topk_metal_sampler_placeholder_headers_staged}" "${tmp_dir}/macos-arm64-framework" versioned MacOSX LSMinimumSystemVersion "$(extract_build_setting "${mac_topk_metal_sampler_staged}" minos)")"
+topk_metal_sampler_vision_framework="$(wrap_framework "${topk_metal_sampler_framework_name}" "${topk_metal_sampler_executable_name}" "${vision_topk_metal_sampler_staged}" "${topk_metal_sampler_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-framework" shallow XROS MinimumOSVersion "$(extract_build_setting "${vision_topk_metal_sampler_staged}" minos)")"
+topk_metal_sampler_vision_sim_framework="$(wrap_framework "${topk_metal_sampler_framework_name}" "${topk_metal_sampler_executable_name}" "${vision_sim_topk_metal_sampler_staged}" "${topk_metal_sampler_placeholder_headers_staged}" "${tmp_dir}/xros-arm64-simulator-framework" shallow XRSimulator MinimumOSVersion "$(extract_build_setting "${vision_sim_topk_metal_sampler_staged}" minos)")"
 
 for engine_framework in \
   "${engine_device_framework}" \
@@ -367,7 +413,13 @@ for framework in \
   "${metal_catalyst_framework}" \
   "${metal_mac_framework}" \
   "${metal_vision_framework}" \
-  "${metal_vision_sim_framework}"; do
+  "${metal_vision_sim_framework}" \
+  "${topk_metal_sampler_device_framework}" \
+  "${topk_metal_sampler_sim_framework}" \
+  "${topk_metal_sampler_catalyst_framework}" \
+  "${topk_metal_sampler_mac_framework}" \
+  "${topk_metal_sampler_vision_framework}" \
+  "${topk_metal_sampler_vision_sim_framework}"; do
   sign_framework "${framework}"
 done
 
@@ -398,8 +450,18 @@ xcodebuild -create-xcframework \
   -framework "${metal_vision_sim_framework}" \
   -output "${artifacts_dir}/LiteRtMetalAccelerator.xcframework"
 
+xcodebuild -create-xcframework \
+  -framework "${topk_metal_sampler_device_framework}" \
+  -framework "${topk_metal_sampler_sim_framework}" \
+  -framework "${topk_metal_sampler_catalyst_framework}" \
+  -framework "${topk_metal_sampler_mac_framework}" \
+  -framework "${topk_metal_sampler_vision_framework}" \
+  -framework "${topk_metal_sampler_vision_sim_framework}" \
+  -output "${artifacts_dir}/LiteRtTopKMetalSampler.xcframework"
+
 echo "Updated package artifacts:"
 echo "  ${artifacts_dir}/LiteRTLMEngineCPU.xcframework"
 echo "  ${artifacts_dir}/GemmaModelConstraintProvider.xcframework"
 echo "  ${artifacts_dir}/LiteRtMetalAccelerator.xcframework"
+echo "  ${artifacts_dir}/LiteRtTopKMetalSampler.xcframework"
 echo "  ${public_headers_dir}/engine.h"

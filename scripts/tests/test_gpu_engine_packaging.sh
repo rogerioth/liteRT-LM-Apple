@@ -30,6 +30,8 @@ printf 'fake Mach-O constraint\n' > "${upstream_dir}/prebuilt/macos_arm64/libGem
 printf 'fake Mach-O metal accelerator\n' > "${upstream_dir}/prebuilt/ios_arm64/libLiteRtMetalAccelerator.dylib"
 printf 'fake Mach-O metal accelerator\n' > "${upstream_dir}/prebuilt/ios_sim_arm64/libLiteRtMetalAccelerator.dylib"
 printf 'fake Mach-O metal accelerator\n' > "${upstream_dir}/prebuilt/macos_arm64/libLiteRtMetalAccelerator.dylib"
+printf 'fake Mach-O topk metal sampler\n' > "${upstream_dir}/prebuilt/ios_arm64/libLiteRtTopKMetalSampler.dylib"
+printf 'fake Mach-O topk metal sampler\n' > "${upstream_dir}/prebuilt/macos_arm64/libLiteRtTopKMetalSampler.dylib"
 
 cat > "${fake_bin}/bazelisk" <<'STUB'
 #!/usr/bin/env bash
@@ -208,7 +210,20 @@ set -euo pipefail
 printf '%s: Mach-O 64-bit dynamically linked shared library arm64\n' "$1"
 STUB
 
-chmod +x "${fake_bin}/bazelisk" "${fake_bin}/xcrun" "${fake_bin}/xcodebuild" "${fake_bin}/install_name_tool" "${fake_bin}/codesign" "${fake_bin}/file"
+cat > "${fake_bin}/nm" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'nm %s\n' "$*" >> "${COMMAND_LOG}"
+
+case "${*: -1}" in
+  *libLiteRtTopKMetalSampler.dylib)
+    printf '0000000000000000 T _LiteRtTopKMetalSampler_UpdateConfig\n'
+    ;;
+esac
+STUB
+
+chmod +x "${fake_bin}/bazelisk" "${fake_bin}/xcrun" "${fake_bin}/xcodebuild" "${fake_bin}/install_name_tool" "${fake_bin}/codesign" "${fake_bin}/file" "${fake_bin}/nm"
 
 export COMMAND_LOG="${command_log}"
 export UPSTREAM_DIR="${upstream_dir}"
@@ -238,6 +253,18 @@ if ! grep -q 'LiteRtMetalAccelerator.xcframework' "${command_log}"; then
   exit 1
 fi
 
+if ! grep -q 'LiteRtTopKMetalSampler.xcframework' "${command_log}"; then
+  echo "FAIL: expected the TopK Metal sampler dylib to be packaged as an XCFramework." >&2
+  cat "${command_log}" >&2
+  exit 1
+fi
+
+if ! grep -q '^nm -gU .*libLiteRtTopKMetalSampler.dylib' "${command_log}"; then
+  echo "FAIL: expected the TopK Metal sampler exports to be validated before packaging." >&2
+  cat "${command_log}" >&2
+  exit 1
+fi
+
 if grep -q -- '-library ' "${command_log}"; then
   echo "FAIL: expected XCFrameworks to be created from framework bundles, not standalone dylibs." >&2
   cat "${command_log}" >&2
@@ -257,8 +284,8 @@ if ! grep -q 'GMCP.framework/GMCP' "${command_log}"; then
 fi
 
 framework_signs="$(grep -c '^codesign ' "${command_log}" || true)"
-if [[ "${framework_signs}" -ne 18 ]]; then
-  echo "FAIL: expected 18 framework signing passes, found ${framework_signs}." >&2
+if [[ "${framework_signs}" -ne 24 ]]; then
+  echo "FAIL: expected 24 framework signing passes, found ${framework_signs}." >&2
   cat "${command_log}" >&2
   exit 1
 fi
