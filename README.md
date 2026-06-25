@@ -223,7 +223,7 @@ That script orchestrates the internal subscripts and runs the full pipeline:
 
 1. clones LiteRT-LM into `.worktree/LiteRT-LM`
 2. checks out the pinned upstream revision
-3. fetches the required Git LFS-backed iOS prebuilts
+3. fetches the required Git LFS-backed iOS prebuilts, including the configured official TopK Metal sampler overlay
 4. applies the local Apple export patch
 5. builds iOS device, iOS simulator, and macOS dylibs with `bazelisk`
 6. derives an Apple Silicon Mac Catalyst slice from the iOS simulator dylib because upstream does not ship a dedicated Catalyst binary yet
@@ -288,8 +288,11 @@ Current published release:
 ## Upstream Pin
 
 - upstream repository: `https://github.com/google-ai-edge/LiteRT-LM.git`
-- pinned revision: `7d1923daaaa1e5143f77f0adb105188e53e8485e`
+- pinned engine revision: `7d1923daaaa1e5143f77f0adb105188e53e8485e`
+- TopK Metal sampler overlay revision: `74dae502097848fe57fdd16cbf47f6522aa9c4f9`
 - configuration source: `scripts/subscripts/common.sh`
+
+The sampler overlay is intentionally pinned separately because the engine source revision predates the usable official iOS TopK Metal sampler export set. Last checked on 2026-06-25, upstream `main` at `dad63c5fb9fde770adacf8d90270ee413b8abf52` still publishes byte-identical iOS and macOS TopK Metal sampler dylibs for this overlay.
 
 ## Compatibility Notes
 

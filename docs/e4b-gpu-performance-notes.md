@@ -228,6 +228,15 @@ prebuilt/ios_arm64/libLiteRtTopKMetalSampler.dylib
 prebuilt/macos_arm64/libLiteRtTopKMetalSampler.dylib
 ```
 
+Upstream status check on 2026-06-25: Google LiteRT-LM `main` at `dad63c5fb9fde770adacf8d90270ee413b8abf52` still publishes official iOS and macOS TopK Metal sampler dylibs that are byte-identical to the `74dae502` overlay:
+
+```text
+ios_arm64 sha256   05b77fa5b7d42891d615943b629678fbad263c1212af597e16b04d8752d49422
+macos_arm64 sha256 a4efd0fbeb83a6c52d784b4120647bf53fd06b599113da62dcf33623deb1f909
+```
+
+The same upstream `sampler_factory.cc` still loads `libLiteRtTopKMetalSampler.dylib` directly, so the local Apple framework fallback remains necessary after wrapping the dylib for Swift Package Manager/Xcode embedding.
+
 The local LiteRT-LM patch makes the runtime try the standard dylib name first and then `@rpath/LTMTS.framework/LTMTS` for Apple framework bundles. It also adds the pinned LiteRT ABI shims required by the newer sampler binary:
 
 ```text
