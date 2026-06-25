@@ -10,9 +10,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-engine="${repo_root}/Artifacts/LiteRTLMEngineCPU.xcframework/ios-arm64/LRE.framework/LRE"
-sampler="${repo_root}/Artifacts/LiteRtTopKMetalSampler.xcframework/ios-arm64/LTMTS.framework/LTMTS"
-accelerator="${repo_root}/Artifacts/LiteRtMetalAccelerator.xcframework/ios-arm64/LMA.framework/LMA"
+engine_framework="${repo_root}/Artifacts/LiteRTLMEngineCPU.xcframework/ios-arm64/LRE.framework"
+sampler_framework="${repo_root}/Artifacts/LiteRtTopKMetalSampler.xcframework/ios-arm64/LTMTS.framework"
+accelerator_framework="${repo_root}/Artifacts/LiteRtMetalAccelerator.xcframework/ios-arm64/LMA.framework"
+
+engine="${engine_framework}/LRE"
+sampler="${sampler_framework}/LTMTS"
+accelerator="${accelerator_framework}/LMA"
 
 require_file() {
   local path="$1"
@@ -71,13 +75,53 @@ require_export() {
   fi
 }
 
+require_install_name() {
+  local dylib="$1"
+  local expected="$2"
+  local description="$3"
+  local install_name
+
+  install_name="$(otool -D "${dylib}" | awk 'NR == 2 { print }')"
+  if [[ "${install_name}" != "${expected}" ]]; then
+    echo "FAIL: ${description} has unexpected dynamic library install name: ${dylib}" >&2
+    echo "Expected: ${expected}" >&2
+    echo "Actual:   ${install_name}" >&2
+    exit 1
+  fi
+}
+
+require_plist_value() {
+  local plist="$1"
+  local key="$2"
+  local expected="$3"
+  local description="$4"
+  local value
+
+  value="$(/usr/libexec/PlistBuddy -c "Print :${key}" "${plist}")"
+  if [[ "${value}" != "${expected}" ]]; then
+    echo "FAIL: ${description} has unexpected ${key}: ${plist}" >&2
+    echo "Expected: ${expected}" >&2
+    echo "Actual:   ${value}" >&2
+    exit 1
+  fi
+}
+
 require_file "${engine}" "iOS engine framework binary"
 require_file "${sampler}" "iOS TopK Metal sampler framework binary"
 require_file "${accelerator}" "iOS Metal accelerator framework binary"
+require_file "${sampler_framework}/Info.plist" "iOS TopK Metal sampler framework Info.plist"
 
 require_ios_arm64_dylib "${engine}" "iOS engine"
 require_ios_arm64_dylib "${sampler}" "iOS TopK Metal sampler"
 require_ios_arm64_dylib "${accelerator}" "iOS Metal accelerator"
+
+require_install_name "${engine}" "@rpath/LRE.framework/LRE" "iOS engine"
+require_install_name "${sampler}" "@rpath/LTMTS.framework/LTMTS" "iOS TopK Metal sampler"
+require_install_name "${accelerator}" "@rpath/LMA.framework/LMA" "iOS Metal accelerator"
+
+require_plist_value "${sampler_framework}/Info.plist" "CFBundleExecutable" "LTMTS" "iOS TopK Metal sampler framework"
+require_plist_value "${sampler_framework}/Info.plist" "CFBundlePackageType" "FMWK" "iOS TopK Metal sampler framework"
+require_plist_value "${sampler_framework}/Info.plist" "CFBundleSupportedPlatforms:0" "iPhoneOS" "iOS TopK Metal sampler framework"
 
 for symbol in \
   LiteRtTopKMetalSampler_Create \
@@ -116,4 +160,4 @@ if [[ -s "${missing_symbols}" ]]; then
   exit 1
 fi
 
-echo "PASS: TopK Metal sampler artifacts are valid iOS arm64 binaries with satisfied LiteRT ABI imports."
+echo "PASS: TopK Metal sampler artifacts are valid iOS arm64 frameworks with expected install names and satisfied LiteRT ABI imports."
