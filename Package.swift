@@ -28,12 +28,17 @@ let package = Package(
             name: "LiteRtMetalAccelerator",
             path: "Artifacts/LiteRtMetalAccelerator.xcframework"
         ),
+        .binaryTarget(
+            name: "LiteRtTopKMetalSampler",
+            path: "Artifacts/LiteRtTopKMetalSampler.xcframework"
+        ),
         .target(
             name: "LiteRTLMApple",
             dependencies: [
                 "LiteRTLMEngineCPU",
                 "GemmaModelConstraintProvider",
                 "LiteRtMetalAccelerator",
+                "LiteRtTopKMetalSampler",
             ],
             path: "Sources/LiteRTLMApple",
             publicHeadersPath: "include"

@@ -25,6 +25,11 @@ require_pattern "ActivationDataType::FLOAT16" "FP16 default for the vision GPU e
 require_pattern "GetMutableVisionExecutorSettings" "C settings propagation to the vision executor"
 require_pattern "litert_lm_engine_settings_set_cpu_kernel_mode" "the C API CPU kernel mode setter"
 require_pattern "SetKernelMode" "LiteRT CPU kernel mode propagation"
+require_pattern "libLiteRtTopKMetalSampler.dylib" "the TopK Metal sampler dynamic library lookup"
+require_pattern "LTMTS.framework" "the framework-wrapped TopK Metal sampler fallback"
+require_pattern "LiteRtCreateModelFromFd" "the LiteRT model-from-fd API required by the TopK Metal sampler"
+require_pattern "LiteRtGetBlockWiseQuantization" "the block-wise quantization ABI shim required by the TopK Metal sampler"
+require_pattern "LoadModelFromAllocation" "the model-from-fd implementation"
 
 if ! grep -q "LITERT_LM_CPU_KERNEL_MODE" "${runtime_file}"; then
   echo "FAIL: example runtime is missing the CPU kernel mode debug environment override." >&2

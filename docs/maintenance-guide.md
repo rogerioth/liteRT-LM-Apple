@@ -16,7 +16,7 @@ That top-level script is the public entrypoint. It delegates to the helper scrip
 
 1. Clones the pinned upstream LiteRT-LM repository into `.worktree/LiteRT-LM`.
 2. Checks out the configured upstream revision.
-3. Fetches Git LFS-backed prebuilt dependencies required by upstream.
+3. Fetches Git LFS-backed prebuilt dependencies required by upstream, including the official TopK Metal sampler overlay.
 4. Applies the local export patch.
 5. Builds iOS device, iOS simulator, and macOS dylibs with `bazelisk`.
 6. Derives an Apple Silicon Mac Catalyst slice from the iOS simulator dylib.
@@ -29,6 +29,7 @@ That top-level script is the public entrypoint. It delegates to the helper scrip
 Run the rebuild flow when:
 
 - you want to update the upstream pinned revision
+- you want to refresh or re-check the official TopK Metal sampler overlay revision
 - you need to regenerate the XCFrameworks
 - you want to verify that checked-in artifacts still reproduce cleanly
 
@@ -49,8 +50,18 @@ If the sample project is temporarily following a feature branch through remote S
 
 - `Artifacts/LiteRTLMEngineCPU.xcframework`
 - `Artifacts/LiteRtMetalAccelerator.xcframework`
+- `Artifacts/LiteRtTopKMetalSampler.xcframework`
 - `Artifacts/GemmaModelConstraintProvider.xcframework`
 - `Sources/LiteRTLMApple/include/engine.h`
 - `README.md` when user-facing setup or compatibility notes change
 
 The current Catalyst and visionOS packaging is intentionally explicit about upstream limitations: LiteRT-LM does not publish dedicated Catalyst or visionOS dylibs today, so this repository derives those slices from the packaged iOS outputs and validates them through Xcode.
+
+## Upstream Pins
+
+The engine source and TopK Metal sampler overlay are configured separately in `scripts/subscripts/common.sh`.
+
+- engine source: `UPSTREAM_BASE_REVISION_DEFAULT`
+- official TopK Metal sampler overlay: `UPSTREAM_TOPK_SAMPLER_REVISION_DEFAULT`
+
+Keep those pins separate until the engine source revision is moved to a Google LiteRT-LM revision that already contains the usable iOS sampler export set and the local patch is refreshed against that revision.

@@ -219,6 +219,33 @@ To match Edge Gallery, the likely required work is one of:
 
 The `LiteRTLMRuntimeOptions.prefillBatchSizes` field is exposed for models that do carry prefill-length magic numbers. It does not fix the public E4B artifact because that artifact exposes no prefill-length magic numbers for LiteRT to rewrite.
 
+## TopK Metal sampler status
+
+The package now bundles Google's official TopK Metal sampler prebuilt as `LiteRtTopKMetalSampler.xcframework` / `LTMTS.framework`. The build script overlays the sampler dylibs from upstream LiteRT-LM commit `74dae502097848fe57fdd16cbf47f6522aa9c4f9` because the pinned engine base revision predates the usable iOS sampler export set. `clone_upstream.sh` keeps the engine source pinned while replacing only:
+
+```text
+prebuilt/ios_arm64/libLiteRtTopKMetalSampler.dylib
+prebuilt/macos_arm64/libLiteRtTopKMetalSampler.dylib
+```
+
+Upstream status check on 2026-06-25: Google LiteRT-LM `main` at `dad63c5fb9fde770adacf8d90270ee413b8abf52` still publishes official iOS and macOS TopK Metal sampler dylibs that are byte-identical to the `74dae502` overlay:
+
+```text
+ios_arm64 sha256   05b77fa5b7d42891d615943b629678fbad263c1212af597e16b04d8752d49422
+macos_arm64 sha256 a4efd0fbeb83a6c52d784b4120647bf53fd06b599113da62dcf33623deb1f909
+```
+
+The same upstream `sampler_factory.cc` still loads `libLiteRtTopKMetalSampler.dylib` directly, so the local Apple framework fallback remains necessary after wrapping the dylib for Swift Package Manager/Xcode embedding.
+
+The local LiteRT-LM patch makes the runtime try the standard dylib name first and then `@rpath/LTMTS.framework/LTMTS` for Apple framework bundles. It also adds the pinned LiteRT ABI shims required by the newer sampler binary:
+
+```text
+LiteRtCreateModelFromFd
+LiteRtGetBlockWiseQuantization
+```
+
+On the iPhone 16 Pro Max regression run, Xcode embedded and signed `LTMTS.framework`, no `GPU sampler unavailable` fallback warning appeared, and the Gemma 4 image tests completed on the physical device. The same run logged duplicate Objective-C class warnings between `LTMTS.framework` and `LMA.framework`; symbol inspection shows both official Google prebuilts contain the same private `SRL*`, `GSC*`, `GIP*`, and `GTM*` Objective-C classes. Treat that as an upstream binary-packaging warning to re-check when refreshing the sampler or accelerator prebuilts.
+
 `LiteRTLMRuntimeOptions` exposes the full upstream tuning surface so future test runs can isolate LiteRT GPU behavior without rebuilding the dylib. The relevant per-call fields are:
 
 ```text

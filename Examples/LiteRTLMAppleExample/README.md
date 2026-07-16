@@ -35,6 +35,7 @@ The current checked-in iOS simulator, visionOS simulator, and Catalyst artifacts
 - a small Swift wrapper around the C conversation API (`LiteRTLMRuntime`)
 - per-call configuration through the `LiteRTLMRuntimeOptions` struct
 - defaults validated for Gemma 4 image inference: GPU main, CPU vision (Gemma 4 only), FP16 main activations, 384-token cap, lower-memory E4B weight conversion, shader-cache reuse
+- packaged GPU runtime companions: `LMA.framework` for the Metal accelerator and `LTMTS.framework` for the TopK Metal sampler
 - EXIF-aware 1024px PNG normalization for attached images
 - benchmark display for initialization, time to first token, prefill, and decode
 - structured `print` logging for downloads, runtime setup, inference, and errors in the Xcode console
@@ -66,7 +67,7 @@ let result = try await runtime.generateResponse(
 )
 ```
 
-`LiteRTLMRuntimeOptions` exposes the full upstream tuning surface (backends, activation precisions, prefill batching, kernel mode, GPU diagnostics). See its inline documentation for the complete field list and the model-aware defaults the runtime applies for `nil` fields.
+`LiteRTLMRuntimeOptions` exposes the full upstream tuning surface (backends, activation precisions, prefill batching, kernel mode, GPU diagnostics). See its inline documentation for the complete field list and the model-aware defaults the runtime applies for `nil` fields. The sample also configures LiteRT's runtime library directory to the app's `Frameworks` directory so the wrapped Metal accelerator and TopK Metal sampler can be discovered on iOS.
 
 ## Changing The Models
 
